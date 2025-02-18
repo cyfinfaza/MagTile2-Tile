@@ -738,6 +738,7 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef* htim)
     __HAL_RCC_GPIOC_CLK_ENABLE();
     /**TIM8 GPIO Configuration
     PB9     ------> TIM8_CH3
+    PB6     ------> TIM8_CH1
     PC7     ------> TIM8_CH2
     */
     GPIO_InitStruct.Pin = GD6_Pin;
@@ -746,6 +747,13 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef* htim)
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     GPIO_InitStruct.Alternate = GPIO_AF10_TIM8;
     HAL_GPIO_Init(GD6_GPIO_Port, &GPIO_InitStruct);
+
+    GPIO_InitStruct.Pin = GD4_Pin;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    GPIO_InitStruct.Alternate = GPIO_AF5_TIM8;
+    HAL_GPIO_Init(GD4_GPIO_Port, &GPIO_InitStruct);
 
     GPIO_InitStruct.Pin = GD5_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
