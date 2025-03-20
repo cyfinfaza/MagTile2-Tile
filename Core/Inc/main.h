@@ -63,6 +63,8 @@ void Error_Handler(void);
 #define IND_B_GPIO_Port GPIOE
 #define GD6_Pin GPIO_PIN_9
 #define GD6_GPIO_Port GPIOB
+#define BOOT0_SENSE_Pin GPIO_PIN_8
+#define BOOT0_SENSE_GPIO_Port GPIOB
 #define GD4_Pin GPIO_PIN_6
 #define GD4_GPIO_Port GPIOB
 #define SWO_Pin GPIO_PIN_3
