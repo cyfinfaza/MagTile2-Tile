@@ -22,6 +22,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+#include "i2c_slave.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -33,6 +35,8 @@
 /* USER CODE BEGIN PD */
 
 #define PID_I_CLAMP 0.1f
+
+#define I2C_BUFFER_SIZE 2
 
 /* USER CODE END PD */
 
@@ -110,6 +114,15 @@ float pid_pwm_output = 0;
 
 float Kp = 0.1f;
 float Ki = 0.0035f;
+
+FDCAN_RxHeaderTypeDef rxHeader;
+uint8_t rxData[8];
+uint8_t can_blink = 1;
+
+// I2C RX buffer
+uint8_t i2cRxBuffer[I2C_BUFFER_SIZE];
+uint8_t i2cRxIndex = 0;
+uint8_t i2cDataReady = 0;
 
 /* USER CODE END PV */
 
@@ -215,6 +228,31 @@ int main(void)
 	HAL_TIM_Base_Start(&htim6);
 	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
 
+	// start CAN
+//	HAL_FDCAN_Start(&hfdcan1);
+//	HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
+//	// allow all messages
+//	FDCAN_FilterTypeDef sFilterConfig;
+//	sFilterConfig.IdType = FDCAN_STANDARD_ID;
+//	sFilterConfig.FilterIndex = 0;
+//	sFilterConfig.FilterType = FDCAN_FILTER_MASK;
+//	sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
+//	sFilterConfig.FilterID1 = 0x00000000;
+//	sFilterConfig.FilterID2 = 0x00000000;
+//	if (HAL_FDCAN_ConfigFilter(&hfdcan1, &sFilterConfig) != HAL_OK) {
+//		Error_Handler();
+//	}
+
+//	 start I2C slave listen
+//	HAL_I2C_EnableListen_IT(&hi2c1);
+//	HAL_I2C_Slave_Receive_IT(&hi2c1, i2cRxBuffer, I2C_BUFFER_SIZE);
+	// initialize I2C registers
+	I2C_Register_Init(0x00, 4, READONLY, &voltage_in_5);
+	I2C_Register_Init(0x01, 4, READONLY, &voltage_in_12);
+	I2C_Register_Init(0x02, 4, READONLY, &voltage_in_HV);
+	I2C_Slave_Init(&hi2c1);
+
+
 	// set LED to yellow
 	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 100);
 	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, 100);
@@ -249,6 +287,13 @@ int main(void)
 		// set timer output
 		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, coil_pwm_ccr_1);
 
+		// set blue LED to CAN blink
+		if (can_blink) {
+			__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 100);
+		} else {
+			__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 0);
+		}
+
 	}
   /* USER CODE END 3 */
 }
@@ -274,8 +319,8 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
   RCC_OscInitStruct.PLL.PLLM = RCC_PLLM_DIV4;
-  RCC_OscInitStruct.PLL.PLLN = 84;
-  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV6;
+  RCC_OscInitStruct.PLL.PLLN = 85;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV7;
   RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV2;
   RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV2;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
@@ -659,10 +704,10 @@ static void MX_FDCAN1_Init(void)
   hfdcan1.Init.AutoRetransmission = DISABLE;
   hfdcan1.Init.TransmitPause = DISABLE;
   hfdcan1.Init.ProtocolException = DISABLE;
-  hfdcan1.Init.NominalPrescaler = 16;
-  hfdcan1.Init.NominalSyncJumpWidth = 1;
-  hfdcan1.Init.NominalTimeSeg1 = 1;
-  hfdcan1.Init.NominalTimeSeg2 = 1;
+  hfdcan1.Init.NominalPrescaler = 17;
+  hfdcan1.Init.NominalSyncJumpWidth = 4;
+  hfdcan1.Init.NominalTimeSeg1 = 13;
+  hfdcan1.Init.NominalTimeSeg2 = 6;
   hfdcan1.Init.DataPrescaler = 1;
   hfdcan1.Init.DataSyncJumpWidth = 1;
   hfdcan1.Init.DataTimeSeg1 = 1;
@@ -696,8 +741,8 @@ static void MX_I2C1_Init(void)
 
   /* USER CODE END I2C1_Init 1 */
   hi2c1.Instance = I2C1;
-  hi2c1.Init.Timing = 0x50916E9F;
-  hi2c1.Init.OwnAddress1 = 0;
+  hi2c1.Init.Timing = 0x30A0A7FB;
+  hi2c1.Init.OwnAddress1 = 80;
   hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
   hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
   hi2c1.Init.OwnAddress2 = 0;
@@ -1304,8 +1349,8 @@ static void MX_USART3_UART_Init(void)
 static void MX_GPIO_Init(void)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
-/* USER CODE BEGIN MX_GPIO_Init_1 */
-/* USER CODE END MX_GPIO_Init_1 */
+  /* USER CODE BEGIN MX_GPIO_Init_1 */
+  /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOE_CLK_ENABLE();
@@ -1321,8 +1366,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(BOOT0_SENSE_GPIO_Port, &GPIO_InitStruct);
 
-/* USER CODE BEGIN MX_GPIO_Init_2 */
-/* USER CODE END MX_GPIO_Init_2 */
+  /* USER CODE BEGIN MX_GPIO_Init_2 */
+  /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
@@ -1355,6 +1400,113 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
 		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, coil_pwm_ccr_1);
 	}
 }
+
+void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs) {
+//	if (hfdcan == &hfdcan1) {
+//		FDCAN_RxHeaderTypeDef rx_header;
+//		uint8_t rx_data[8];
+//		if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &rx_header, rx_data)
+//				!= HAL_OK) {
+//			Error_Handler();
+//		}
+		// toggle can blink
+		can_blink = !can_blink;
+//	}
+}
+
+///**
+// * @brief I2C slave address matched callback
+// */
+//void HAL_I2C_AddrCallback(I2C_HandleTypeDef *hi2c, uint8_t TransferDirection, uint16_t AddrMatchCode)
+//{
+//  if (TransferDirection == I2C_DIRECTION_RECEIVE)
+//  {
+//    /* Reset buffer index and ready flag when new transmission starts */
+//    i2cRxIndex = 0;
+//    i2cDataReady = 0;
+//
+//    /* Prepare to receive data */
+//    HAL_I2C_Slave_Seq_Receive_IT(hi2c, &i2cRxBuffer[i2cRxIndex], 1, I2C_FIRST_FRAME);
+//  }
+//  else
+//  {
+//    /* Master is requesting data, implement transmit functionality if needed */
+//    /* For now, just complete the transfer */
+//    HAL_I2C_Slave_Seq_Transmit_IT(hi2c, NULL, 0, I2C_LAST_FRAME);
+//  }
+//}
+
+///**
+// * @brief I2C slave receive complete callback
+// */
+//void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *hi2c)
+//{
+//  /* Increment buffer index */
+//  i2cRxIndex++;
+//
+//  /* Check if buffer is full */
+//  if (i2cRxIndex >= I2C_BUFFER_SIZE)
+//  {
+//    /* Buffer full, set data ready flag */
+//    i2cDataReady = 1;
+//
+//    /* Listen for next address match */
+//    HAL_I2C_EnableListen_IT(hi2c);
+//  }
+//  else
+//  {
+//    /* Continue receiving data */
+//    HAL_I2C_Slave_Seq_Receive_IT(hi2c, &i2cRxBuffer[i2cRxIndex], 1, I2C_NEXT_FRAME);
+//  }
+//}
+//
+///**
+// * @brief I2C listen complete callback
+// */
+//void HAL_I2C_ListenCpltCallback(I2C_HandleTypeDef *hi2c)
+//{
+//  /* Transfer completed, set data ready flag */
+//  i2cDataReady = 1;
+//
+//  /* Re-enable Address Listen Mode */
+//  HAL_I2C_EnableListen_IT(hi2c);
+//}
+//
+///**
+// * @brief I2C error callback
+// */
+//void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c)
+//{
+//  /* Handle error (e.g., bus error, arbitration lost, etc.) */
+//  /* For simplicity, just re-enable listen mode */
+//  if (hi2c->ErrorCode != HAL_I2C_ERROR_AF)
+//  {
+//    HAL_I2C_EnableListen_IT(hi2c);
+//  }
+//}
+
+//void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *hi2c)
+//{
+//    // Process received data and re-enable listening
+//    can_blink = !can_blink;
+//    HAL_I2C_Slave_Receive_IT(hi2c, i2cRxBuffer, sizeof(i2cRxBuffer));
+//}
+
+//void HAL_I2C_AddrCallback(I2C_HandleTypeDef *hi2c, uint8_t TransferDirection, uint16_t AddrMatchCode)
+//{
+//	can_blink = !can_blink;
+//    if (TransferDirection == I2C_DIRECTION_TRANSMIT) {
+//        // Master is sending to us → we should receive
+//        HAL_I2C_Slave_Receive_IT(hi2c, i2cRxBuffer, sizeof(i2cRxBuffer));
+//    } else {
+//        // Master is reading from us → we should transmit
+//    	// prepare some data
+//    	uint8_t i2cTxBuffer[2];
+//    	i2cTxBuffer[0] = 0xAA;
+//    	i2cTxBuffer[1] = 0xBB;
+//        HAL_I2C_Slave_Transmit_IT(hi2c, i2cTxBuffer, sizeof(i2cTxBuffer));
+//    }
+//}
 
 /* USER CODE END 4 */
 
