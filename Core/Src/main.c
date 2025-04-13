@@ -76,7 +76,7 @@ uint8_t BOOT0_SENSE;
 uint32_t V_SENSE_HV;
 uint32_t V_SENSE_12;
 uint32_t V_SENSE_5;
-volatile uint32_t EA_SENSE_1 = 0;
+uint32_t EA_SENSE_1 = 0;
 uint32_t EA_SENSE_2 = 0;
 uint32_t EA_SENSE_3 = 0;
 uint32_t EA_SENSE_4 = 0;
@@ -95,10 +95,48 @@ uint32_t TEMP_SENSE_7;
 uint32_t TEMP_SENSE_8;
 uint32_t TEMP_SENSE_9;
 
-// global variables for analog values
-float voltage_in_HV;
-float voltage_in_12;
-float voltage_in_5;
+MT2_Slave_Status slave_status;
+MT2_Slave_Faults slave_faults;
+MT2_Master_Status master_status;
+MT2_Slave_Settings slave_settings;
+
+float v_sense_5;
+float v_sense_12;
+float v_sense_hv;
+uint16_t mcu_temp;
+
+uint8_t adj_west_addr;
+uint8_t adj_north_addr;
+uint8_t adj_east_addr;
+uint8_t adj_south_addr;
+
+uint16_t coil_1_setpoint;
+uint16_t coil_2_setpoint;
+uint16_t coil_3_setpoint;
+uint16_t coil_4_setpoint;
+uint16_t coil_5_setpoint;
+uint16_t coil_6_setpoint;
+uint16_t coil_7_setpoint;
+uint16_t coil_8_setpoint;
+uint16_t coil_9_setpoint;
+uint16_t coil_1_current_reading;
+uint16_t coil_2_current_reading;
+uint16_t coil_3_current_reading;
+uint16_t coil_4_current_reading;
+uint16_t coil_5_current_reading;
+uint16_t coil_6_current_reading;
+uint16_t coil_7_current_reading;
+uint16_t coil_8_current_reading;
+uint16_t coil_9_current_reading;
+int16_t coil_1_temp;
+int16_t coil_2_temp;
+int16_t coil_3_temp;
+int16_t coil_4_temp;
+int16_t coil_5_temp;
+int16_t coil_6_temp;
+int16_t coil_7_temp;
+int16_t coil_8_temp;
+int16_t coil_9_temp;
 
 volatile float coil_current_1 = 0;
 
@@ -247,9 +285,48 @@ int main(void)
 //	HAL_I2C_EnableListen_IT(&hi2c1);
 //	HAL_I2C_Slave_Receive_IT(&hi2c1, i2cRxBuffer, I2C_BUFFER_SIZE);
 	// initialize I2C registers
-	I2C_Register_Init(0x00, 4, READONLY, &voltage_in_5);
-	I2C_Register_Init(0x01, 4, READONLY, &voltage_in_12);
-	I2C_Register_Init(0x02, 4, READONLY, &voltage_in_HV);
+	I2C_RegisterInit(0x04, 1, READONLY, &slave_status);
+	I2C_RegisterInit(0x05, 1, READONLY, &slave_faults);
+	I2C_RegisterInit(0x06, 1, READWRITE, &master_status);
+	I2C_RegisterInit(0x07, 1, READWRITE, &slave_settings);
+
+	I2C_RegisterInit(0x08, 4, READONLY, &v_sense_5);
+	I2C_RegisterInit(0x09, 4, READONLY, &v_sense_12);
+	I2C_RegisterInit(0x0A, 4, READONLY, &v_sense_hv);
+	I2C_RegisterInit(0x0B, 2, READONLY, &mcu_temp);
+
+	I2C_RegisterInit(0x0C, 1, READONLY, &adj_west_addr);
+	I2C_RegisterInit(0x0D, 1, READONLY, &adj_north_addr);
+	I2C_RegisterInit(0x0E, 1, READONLY, &adj_east_addr);
+	I2C_RegisterInit(0x0F, 1, READONLY, &adj_south_addr);
+
+	I2C_RegisterInit(0x10, 2, READWRITE, &coil_1_setpoint);
+	I2C_RegisterInit(0x11, 2, READWRITE, &coil_2_setpoint);
+	I2C_RegisterInit(0x12, 2, READWRITE, &coil_3_setpoint);
+	I2C_RegisterInit(0x13, 2, READWRITE, &coil_4_setpoint);
+	I2C_RegisterInit(0x14, 2, READWRITE, &coil_5_setpoint);
+	I2C_RegisterInit(0x15, 2, READWRITE, &coil_6_setpoint);
+	I2C_RegisterInit(0x16, 2, READWRITE, &coil_7_setpoint);
+	I2C_RegisterInit(0x17, 2, READWRITE, &coil_8_setpoint);
+	I2C_RegisterInit(0x18, 2, READWRITE, &coil_9_setpoint);
+	I2C_RegisterInit(0x20, 2, READONLY, &coil_1_current_reading);
+	I2C_RegisterInit(0x21, 2, READONLY, &coil_2_current_reading);
+	I2C_RegisterInit(0x22, 2, READONLY, &coil_3_current_reading);
+	I2C_RegisterInit(0x23, 2, READONLY, &coil_4_current_reading);
+	I2C_RegisterInit(0x24, 2, READONLY, &coil_5_current_reading);
+	I2C_RegisterInit(0x25, 2, READONLY, &coil_6_current_reading);
+	I2C_RegisterInit(0x26, 2, READONLY, &coil_7_current_reading);
+	I2C_RegisterInit(0x27, 2, READONLY, &coil_8_current_reading);
+	I2C_RegisterInit(0x28, 2, READONLY, &coil_9_current_reading);
+	I2C_RegisterInit(0x30, 2, READONLY, &coil_1_temp);
+	I2C_RegisterInit(0x31, 2, READONLY, &coil_2_temp);
+	I2C_RegisterInit(0x32, 2, READONLY, &coil_3_temp);
+	I2C_RegisterInit(0x33, 2, READONLY, &coil_4_temp);
+	I2C_RegisterInit(0x34, 2, READONLY, &coil_5_temp);
+	I2C_RegisterInit(0x35, 2, READONLY, &coil_6_temp);
+	I2C_RegisterInit(0x36, 2, READONLY, &coil_7_temp);
+	I2C_RegisterInit(0x37, 2, READONLY, &coil_8_temp);
+	I2C_RegisterInit(0x38, 2, READONLY, &coil_9_temp);
 	I2C_Slave_Init(&hi2c1);
 
 
@@ -280,9 +357,9 @@ int main(void)
 		V_SENSE_5 = HAL_ADC_GetValue(&hadc1);
 
 		// calculate analog values
-		voltage_in_12 = V_SENSE_12 * 0.0080566406;
-		voltage_in_5 = V_SENSE_5 * 0.0014648438;
-		voltage_in_HV = V_SENSE_HV * 0.0194091797;
+		v_sense_12 = V_SENSE_12 * 0.0080566406;
+		v_sense_5 = V_SENSE_5 * 0.0014648438;
+		v_sense_hv = V_SENSE_HV * 0.0194091797;
 
 		// set timer output
 		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, coil_pwm_ccr_1);
@@ -741,8 +818,8 @@ static void MX_I2C1_Init(void)
 
   /* USER CODE END I2C1_Init 1 */
   hi2c1.Instance = I2C1;
-  hi2c1.Init.Timing = 0x30A0A7FB;
-  hi2c1.Init.OwnAddress1 = 80;
+  hi2c1.Init.Timing = 0x00802172;
+  hi2c1.Init.OwnAddress1 = 2;
   hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
   hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
   hi2c1.Init.OwnAddress2 = 0;
@@ -767,6 +844,10 @@ static void MX_I2C1_Init(void)
   {
     Error_Handler();
   }
+
+  /** I2C Fast mode Plus enable
+  */
+  HAL_I2CEx_EnableFastModePlus(I2C_FASTMODEPLUS_I2C1);
   /* USER CODE BEGIN I2C1_Init 2 */
 
   /* USER CODE END I2C1_Init 2 */

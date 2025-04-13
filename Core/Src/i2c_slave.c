@@ -16,14 +16,19 @@ static uint8_t current_reg = 0xFF;
 
 static I2C_HandleTypeDef* i2c_handle;
 
-extern can_blink;
+uint8_t myAddr;
+
+extern uint8_t can_blink;
 
 void I2C_Slave_Init(I2C_HandleTypeDef* hi2c) {
     i2c_handle = hi2c;
+    myAddr = hi2c->Init.OwnAddress1;
+    // register 0 always just returns my address
+    I2C_RegisterInit(0, 1, READONLY, &myAddr);
     HAL_I2C_EnableListen_IT(hi2c);
 }
 
-void I2C_Register_Init(uint8_t reg_addr, uint8_t size, I2C_RW_Access access,
+void I2C_RegisterInit(uint8_t reg_addr, uint8_t size, I2C_RW_Access access,
 		void *mem_ptr) {
 	if (reg_addr < MAX_REGISTERS) {
 		i2c_register_map[reg_addr].size = size;
@@ -41,7 +46,7 @@ void HAL_I2C_AddrCallback(I2C_HandleTypeDef *hi2c, uint8_t TransferDirection, ui
         memcpy(tx_buffer, i2c_register_map[current_reg].mem_ptr, i2c_register_map[current_reg].size);
         HAL_I2C_Slave_Seq_Transmit_IT(hi2c, tx_buffer, i2c_register_map[current_reg].size, I2C_LAST_FRAME);
     } else {
-        static uint8_t dummy = 0xFF;
+        static uint8_t dummy = 0x00;
         HAL_I2C_Slave_Seq_Transmit_IT(hi2c, &dummy, 1, I2C_LAST_FRAME);
     }
 }
