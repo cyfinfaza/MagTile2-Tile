@@ -83,6 +83,8 @@ void Error_Handler(void);
 #define I2C_SDA_GPIO_Port GPIOB
 #define IND_G_Pin GPIO_PIN_5
 #define IND_G_GPIO_Port GPIOB
+#define ADDR_0_Pin GPIO_PIN_7
+#define ADDR_0_GPIO_Port GPIOD
 #define CAN_RX_Pin GPIO_PIN_0
 #define CAN_RX_GPIO_Port GPIOD
 #define SWCLK_Pin GPIO_PIN_14
@@ -117,6 +119,8 @@ void Error_Handler(void);
 #define TEMP6_GPIO_Port GPIOC
 #define TEMP7_Pin GPIO_PIN_1
 #define TEMP7_GPIO_Port GPIOC
+#define ADDR_4_Pin GPIO_PIN_14
+#define ADDR_4_GPIO_Port GPIOD
 #define GD5_Pin GPIO_PIN_7
 #define GD5_GPIO_Port GPIOC
 #define TEMP9_Pin GPIO_PIN_3
@@ -129,6 +133,10 @@ void Error_Handler(void);
 #define EA8_GPIO_Port GPIOD
 #define RX_S_Pin GPIO_PIN_9
 #define RX_S_GPIO_Port GPIOD
+#define ADDR_3_Pin GPIO_PIN_13
+#define ADDR_3_GPIO_Port GPIOD
+#define ADDR_5_Pin GPIO_PIN_15
+#define ADDR_5_GPIO_Port GPIOD
 #define VS_HV_Pin GPIO_PIN_2
 #define VS_HV_GPIO_Port GPIOA
 #define VS_12_Pin GPIO_PIN_3
@@ -149,6 +157,8 @@ void Error_Handler(void);
 #define EA4_GPIO_Port GPIOE
 #define TX_S_Pin GPIO_PIN_10
 #define TX_S_GPIO_Port GPIOB
+#define ADDR_2_Pin GPIO_PIN_12
+#define ADDR_2_GPIO_Port GPIOD
 #define TEMP4_Pin GPIO_PIN_7
 #define TEMP4_GPIO_Port GPIOA
 #define TEMP5_Pin GPIO_PIN_4
@@ -159,6 +169,8 @@ void Error_Handler(void);
 #define EA3_GPIO_Port GPIOE
 #define EA6_Pin GPIO_PIN_12
 #define EA6_GPIO_Port GPIOB
+#define ADDR_1_Pin GPIO_PIN_8
+#define ADDR_1_GPIO_Port GPIOD
 
 /* USER CODE BEGIN Private defines */
 

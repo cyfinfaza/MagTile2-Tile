@@ -77,6 +77,7 @@ UART_HandleTypeDef huart3;
 
 // global variables for all digital inputs
 uint8_t BOOT0_SENSE;
+uint8_t ADDR_SWITCHES;
 
 MT2_Slave_Status slave_status;
 MT2_Slave_Faults slave_faults;
@@ -225,7 +226,7 @@ int main(void)
 	HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
 	HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
 
-	HAL_Delay(1000);
+//	HAL_Delay(1000);
 
 
 
@@ -312,8 +313,8 @@ int main(void)
 
 
 	// set LED to yellow
-	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 100);
-	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, 100);
+	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 0);
+	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, 10);
 	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 0);
 
   /* USER CODE END 2 */
@@ -355,9 +356,23 @@ int main(void)
 
 		HAL_Delay(10);
 
+		// read address switches
+		uint8_t new_addr_switches = 0;
+		new_addr_switches |= !HAL_GPIO_ReadPin(ADDR_0_GPIO_Port, ADDR_0_Pin) << 5;
+		new_addr_switches |= !HAL_GPIO_ReadPin(ADDR_1_GPIO_Port, ADDR_1_Pin) << 4;
+		new_addr_switches |= !HAL_GPIO_ReadPin(ADDR_2_GPIO_Port, ADDR_2_Pin) << 3;
+		new_addr_switches |= !HAL_GPIO_ReadPin(ADDR_3_GPIO_Port, ADDR_3_Pin) << 2;
+		new_addr_switches |= !HAL_GPIO_ReadPin(ADDR_4_GPIO_Port, ADDR_4_Pin) << 1;
+		new_addr_switches |= !HAL_GPIO_ReadPin(ADDR_5_GPIO_Port, ADDR_5_Pin) << 0;
+		ADDR_SWITCHES = new_addr_switches;
+
+		// set i2c1 primary address using register
+//		hi2c1.Instance->OAR1 &= ~I2C_OAR1_OA1EN;
+		hi2c1.Instance->OAR1 = ((ADDR_SWITCHES+1) << 1) | I2C_OAR1_OA1EN;
+
 		// set blue LED to CAN blink
 		if (can_blink) {
-			__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 100);
+			__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 30);
 		} else {
 			__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 0);
 		}
@@ -1563,19 +1578,19 @@ static void MX_DMA_Init(void)
 
   /* DMA interrupt init */
   /* DMA1_Channel1_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 2, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
   /* DMA1_Channel2_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 2, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
   /* DMA1_Channel3_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 2, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
   /* DMA1_Channel4_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel4_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel4_IRQn, 2, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel4_IRQn);
   /* DMA1_Channel5_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 2, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel5_IRQn);
 
 }
@@ -1604,6 +1619,14 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(BOOT0_SENSE_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : ADDR_0_Pin ADDR_4_Pin ADDR_3_Pin ADDR_5_Pin
+                           ADDR_2_Pin ADDR_1_Pin */
+  GPIO_InitStruct.Pin = ADDR_0_Pin|ADDR_4_Pin|ADDR_3_Pin|ADDR_5_Pin
+                          |ADDR_2_Pin|ADDR_1_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
   /* USER CODE END MX_GPIO_Init_2 */
