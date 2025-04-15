@@ -35,8 +35,6 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-#define PID_I_CLAMP 0.1f
-
 #define I2C_BUFFER_SIZE 2
 
 /* USER CODE END PD */
@@ -77,7 +75,8 @@ UART_HandleTypeDef huart3;
 
 // global variables for all digital inputs
 uint8_t BOOT0_SENSE;
-uint8_t ADDR_SWITCHES;
+
+uint8_t my_address = 0x00;
 
 MT2_Slave_Status slave_status;
 MT2_Slave_Faults slave_faults;
@@ -91,30 +90,10 @@ uint8_t adj_north_addr;
 uint8_t adj_east_addr;
 uint8_t adj_south_addr;
 
-uint16_t coil_1_setpoint;
-uint16_t coil_2_setpoint;
-uint16_t coil_3_setpoint;
-uint16_t coil_4_setpoint;
-uint16_t coil_5_setpoint;
-uint16_t coil_6_setpoint;
-uint16_t coil_7_setpoint;
-uint16_t coil_8_setpoint;
-uint16_t coil_9_setpoint;
-
 volatile float coil_current_1 = 0;
 
 // PWM outputs
 uint16_t coil_pwm_ccr_1 = 0;
-
-// Single PID
-float current_setpoint = 0.190f;
-float pid_error = 0;
-float pid_error_integral = 0;
-float pid_pwm_change = 0;
-float pid_pwm_output = 0;
-
-float Kp = 0.1f;
-float Ki = 0.0035f;
 
 FDCAN_RxHeaderTypeDef rxHeader;
 uint8_t rxData[8];
@@ -124,17 +103,6 @@ uint8_t can_blink = 1;
 uint8_t i2cRxBuffer[I2C_BUFFER_SIZE];
 uint8_t i2cRxIndex = 0;
 uint8_t i2cDataReady = 0;
-
-// PWM Timers
-uint16_t pwm_ccr_1 = 0;
-uint16_t pwm_ccr_2 = 0;
-uint16_t pwm_ccr_3 = 0;
-uint16_t pwm_ccr_4 = 0;
-uint16_t pwm_ccr_5 = 0;
-uint16_t pwm_ccr_6 = 0;
-uint16_t pwm_ccr_7 = 0;
-uint16_t pwm_ccr_8 = 0;
-uint16_t pwm_ccr_9 = 0;
 
 /* USER CODE END PV */
 
@@ -228,7 +196,16 @@ int main(void)
 
 //	HAL_Delay(1000);
 
-
+	uint8_t new_addr_switches = 0;
+	new_addr_switches |= !HAL_GPIO_ReadPin(ADDR_0_GPIO_Port, ADDR_0_Pin) << 5;
+	new_addr_switches |= !HAL_GPIO_ReadPin(ADDR_1_GPIO_Port, ADDR_1_Pin) << 4;
+	new_addr_switches |= !HAL_GPIO_ReadPin(ADDR_2_GPIO_Port, ADDR_2_Pin) << 3;
+	new_addr_switches |= !HAL_GPIO_ReadPin(ADDR_3_GPIO_Port, ADDR_3_Pin) << 2;
+	new_addr_switches |= !HAL_GPIO_ReadPin(ADDR_4_GPIO_Port, ADDR_4_Pin) << 1;
+	new_addr_switches |= !HAL_GPIO_ReadPin(ADDR_5_GPIO_Port, ADDR_5_Pin) << 0;
+	my_address = new_addr_switches + 1;
+	hi2c1.Init.OwnAddress1 = my_address << 1;
+	HAL_I2C_Init(&hi2c1);
 
 	// start the ADCs
 //	HAL_ADC_Start_IT(&hadc3);
@@ -282,35 +259,13 @@ int main(void)
 	I2C_RegisterInit(0x0E, 1, READONLY, &adj_east_addr);
 	I2C_RegisterInit(0x0F, 1, READONLY, &adj_south_addr);
 
-	I2C_RegisterInit(0x10, 2, READWRITE, &coil_1_setpoint);
-	I2C_RegisterInit(0x11, 2, READWRITE, &coil_2_setpoint);
-	I2C_RegisterInit(0x12, 2, READWRITE, &coil_3_setpoint);
-	I2C_RegisterInit(0x13, 2, READWRITE, &coil_4_setpoint);
-	I2C_RegisterInit(0x14, 2, READWRITE, &coil_5_setpoint);
-	I2C_RegisterInit(0x15, 2, READWRITE, &coil_6_setpoint);
-	I2C_RegisterInit(0x16, 2, READWRITE, &coil_7_setpoint);
-	I2C_RegisterInit(0x17, 2, READWRITE, &coil_8_setpoint);
-	I2C_RegisterInit(0x18, 2, READWRITE, &coil_9_setpoint);
-	I2C_RegisterInit(0x20, 2, READONLY, &coil_1_current_reading);
-	I2C_RegisterInit(0x21, 2, READONLY, &coil_2_current_reading);
-	I2C_RegisterInit(0x22, 2, READONLY, &coil_3_current_reading);
-	I2C_RegisterInit(0x23, 2, READONLY, &coil_4_current_reading);
-	I2C_RegisterInit(0x24, 2, READONLY, &coil_5_current_reading);
-	I2C_RegisterInit(0x25, 2, READONLY, &coil_6_current_reading);
-	I2C_RegisterInit(0x26, 2, READONLY, &coil_7_current_reading);
-	I2C_RegisterInit(0x27, 2, READONLY, &coil_8_current_reading);
-	I2C_RegisterInit(0x28, 2, READONLY, &coil_9_current_reading);
-	I2C_RegisterInit(0x30, 2, READONLY, &coil_1_temp);
-	I2C_RegisterInit(0x31, 2, READONLY, &coil_2_temp);
-	I2C_RegisterInit(0x32, 2, READONLY, &coil_3_temp);
-	I2C_RegisterInit(0x33, 2, READONLY, &coil_4_temp);
-	I2C_RegisterInit(0x34, 2, READONLY, &coil_5_temp);
-	I2C_RegisterInit(0x35, 2, READONLY, &coil_6_temp);
-	I2C_RegisterInit(0x36, 2, READONLY, &coil_7_temp);
-	I2C_RegisterInit(0x37, 2, READONLY, &coil_8_temp);
-	I2C_RegisterInit(0x38, 2, READONLY, &coil_9_temp);
-	I2C_Slave_Init(&hi2c1);
+	for (int i = 0; i < NUM_COILS; i++) {
+		I2C_RegisterInit(0x10 + i, 2, READWRITE, &coil_setpoint[i]);
+		I2C_RegisterInit(0x20 + i, 2, READONLY, &coil_current_reading[i]);
+		I2C_RegisterInit(0x30 + i, 2, READONLY, &coil_temp[i]);
+	}
 
+	I2C_Slave_Init(&hi2c1);
 
 	// set LED to yellow
 	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 0);
@@ -344,31 +299,17 @@ int main(void)
 //		v_sense_hv = V_SENSE_HV * 0.0194091797;
 
 		// set timer output
-		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, pwm_ccr_1);
-		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, pwm_ccr_2);
-		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, pwm_ccr_3);
-		__HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_1, pwm_ccr_4);
-		__HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_2, pwm_ccr_5);
-		__HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_3, pwm_ccr_6);
-		__HAL_TIM_SET_COMPARE(&htim20, TIM_CHANNEL_1, pwm_ccr_7);
-		__HAL_TIM_SET_COMPARE(&htim20, TIM_CHANNEL_2, pwm_ccr_8);
-		__HAL_TIM_SET_COMPARE(&htim20, TIM_CHANNEL_3, pwm_ccr_9);
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, coil_pwm_ccr[0]);
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, coil_pwm_ccr[1]);
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, coil_pwm_ccr[2]);
+		__HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_1, coil_pwm_ccr[3]);
+		__HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_2, coil_pwm_ccr[4]);
+		__HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_3, coil_pwm_ccr[5]);
+		__HAL_TIM_SET_COMPARE(&htim20, TIM_CHANNEL_1, coil_pwm_ccr[6]);
+		__HAL_TIM_SET_COMPARE(&htim20, TIM_CHANNEL_2, coil_pwm_ccr[7]);
+		__HAL_TIM_SET_COMPARE(&htim20, TIM_CHANNEL_3, coil_pwm_ccr[8]);
 
 		HAL_Delay(10);
-
-		// read address switches
-		uint8_t new_addr_switches = 0;
-		new_addr_switches |= !HAL_GPIO_ReadPin(ADDR_0_GPIO_Port, ADDR_0_Pin) << 5;
-		new_addr_switches |= !HAL_GPIO_ReadPin(ADDR_1_GPIO_Port, ADDR_1_Pin) << 4;
-		new_addr_switches |= !HAL_GPIO_ReadPin(ADDR_2_GPIO_Port, ADDR_2_Pin) << 3;
-		new_addr_switches |= !HAL_GPIO_ReadPin(ADDR_3_GPIO_Port, ADDR_3_Pin) << 2;
-		new_addr_switches |= !HAL_GPIO_ReadPin(ADDR_4_GPIO_Port, ADDR_4_Pin) << 1;
-		new_addr_switches |= !HAL_GPIO_ReadPin(ADDR_5_GPIO_Port, ADDR_5_Pin) << 0;
-		ADDR_SWITCHES = new_addr_switches;
-
-		// set i2c1 primary address using register
-//		hi2c1.Instance->OAR1 &= ~I2C_OAR1_OA1EN;
-		hi2c1.Instance->OAR1 = ((ADDR_SWITCHES+1) << 1) | I2C_OAR1_OA1EN;
 
 		// set blue LED to CAN blink
 		if (can_blink) {
@@ -688,8 +629,8 @@ static void MX_ADC3_Init(void)
   hadc3.Init.DMAContinuousRequests = ENABLE;
   hadc3.Init.Overrun = ADC_OVR_DATA_OVERWRITTEN;
   hadc3.Init.OversamplingMode = ENABLE;
-  hadc3.Init.Oversampling.Ratio = ADC_OVERSAMPLING_RATIO_256;
-  hadc3.Init.Oversampling.RightBitShift = ADC_RIGHTBITSHIFT_4;
+  hadc3.Init.Oversampling.Ratio = ADC_OVERSAMPLING_RATIO_16;
+  hadc3.Init.Oversampling.RightBitShift = ADC_RIGHTBITSHIFT_NONE;
   hadc3.Init.Oversampling.TriggeredMode = ADC_TRIGGEREDMODE_SINGLE_TRIGGER;
   hadc3.Init.Oversampling.OversamplingStopReset = ADC_REGOVERSAMPLING_CONTINUED_MODE;
   if (HAL_ADC_Init(&hadc3) != HAL_OK)
@@ -777,8 +718,8 @@ static void MX_ADC4_Init(void)
   hadc4.Init.DMAContinuousRequests = ENABLE;
   hadc4.Init.Overrun = ADC_OVR_DATA_OVERWRITTEN;
   hadc4.Init.OversamplingMode = ENABLE;
-  hadc4.Init.Oversampling.Ratio = ADC_OVERSAMPLING_RATIO_256;
-  hadc4.Init.Oversampling.RightBitShift = ADC_RIGHTBITSHIFT_4;
+  hadc4.Init.Oversampling.Ratio = ADC_OVERSAMPLING_RATIO_16;
+  hadc4.Init.Oversampling.RightBitShift = ADC_RIGHTBITSHIFT_NONE;
   hadc4.Init.Oversampling.TriggeredMode = ADC_TRIGGEREDMODE_SINGLE_TRIGGER;
   hadc4.Init.Oversampling.OversamplingStopReset = ADC_REGOVERSAMPLING_CONTINUED_MODE;
   if (HAL_ADC_Init(&hadc4) != HAL_OK)
@@ -858,8 +799,8 @@ static void MX_ADC5_Init(void)
   hadc5.Init.DMAContinuousRequests = ENABLE;
   hadc5.Init.Overrun = ADC_OVR_DATA_PRESERVED;
   hadc5.Init.OversamplingMode = ENABLE;
-  hadc5.Init.Oversampling.Ratio = ADC_OVERSAMPLING_RATIO_256;
-  hadc5.Init.Oversampling.RightBitShift = ADC_RIGHTBITSHIFT_4;
+  hadc5.Init.Oversampling.Ratio = ADC_OVERSAMPLING_RATIO_16;
+  hadc5.Init.Oversampling.RightBitShift = ADC_RIGHTBITSHIFT_NONE;
   hadc5.Init.Oversampling.TriggeredMode = ADC_TRIGGEREDMODE_SINGLE_TRIGGER;
   hadc5.Init.Oversampling.OversamplingStopReset = ADC_REGOVERSAMPLING_CONTINUED_MODE;
   if (HAL_ADC_Init(&hadc5) != HAL_OK)

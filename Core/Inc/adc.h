@@ -11,6 +11,8 @@
 #include <stdint.h>
 #include "stm32g4xx_hal.h"
 
+#define NUM_COILS 9
+
 // ADC1 is voltage sensors
 #define ADC1_CHANNELS 3
 
@@ -31,56 +33,39 @@ extern uint16_t V_SENSE_HV;
 extern uint16_t V_SENSE_12;
 extern uint16_t V_SENSE_5;
 
-extern uint16_t TEMP_SENSE_1;
-extern uint16_t TEMP_SENSE_2;
-extern uint16_t TEMP_SENSE_3;
-extern uint16_t TEMP_SENSE_4;
-extern uint16_t TEMP_SENSE_5;
-extern uint16_t TEMP_SENSE_6;
-extern uint16_t TEMP_SENSE_7;
-extern uint16_t TEMP_SENSE_8;
-extern uint16_t TEMP_SENSE_9;
+extern uint16_t TEMP_SENSE[NUM_COILS];
 
-extern uint16_t COIL_CURRENT_1;
-extern uint16_t COIL_CURRENT_2;
-extern uint16_t COIL_CURRENT_3;
-extern uint16_t COIL_CURRENT_4;
-extern uint16_t COIL_CURRENT_5;
-extern uint16_t COIL_CURRENT_6;
-extern uint16_t COIL_CURRENT_7;
-extern uint16_t COIL_CURRENT_8;
-extern uint16_t COIL_CURRENT_9;
+extern uint16_t COIL_CURRENT[NUM_COILS];
 
 // calculated values
 extern float v_sense_hv;
 extern float v_sense_12;
 extern float v_sense_5;
 
-extern uint16_t coil_1_current_reading;
-extern uint16_t coil_2_current_reading;
-extern uint16_t coil_3_current_reading;
-extern uint16_t coil_4_current_reading;
-extern uint16_t coil_5_current_reading;
-extern uint16_t coil_6_current_reading;
-extern uint16_t coil_7_current_reading;
-extern uint16_t coil_8_current_reading;
-extern uint16_t coil_9_current_reading;
+// PID
+extern uint16_t coil_setpoint[NUM_COILS];
+extern uint16_t coil_pwm_ccr[NUM_COILS];
+extern int32_t pid_error[NUM_COILS];
+extern int32_t pid_error_integral[NUM_COILS];
+extern float pid_pwm_change[NUM_COILS];
+extern float pid_pwm_output[NUM_COILS];
 
-extern int16_t coil_1_temp;
-extern int16_t coil_2_temp;
-extern int16_t coil_3_temp;
-extern int16_t coil_4_temp;
-extern int16_t coil_5_temp;
-extern int16_t coil_6_temp;
-extern int16_t coil_7_temp;
-extern int16_t coil_8_temp;
-extern int16_t coil_9_temp;
+extern float Kp;
+extern float Ki;
+
+extern uint16_t coil_current_reading[NUM_COILS];
+
+extern int16_t coil_temp[NUM_COILS];
+
+extern TIM_HandleTypeDef htim1;
+extern TIM_HandleTypeDef htim8;
+extern TIM_HandleTypeDef htim20;
 
 void ADC_Init(ADC_HandleTypeDef* hadc1, ADC_HandleTypeDef* hadc2, ADC_HandleTypeDef* hadc3, ADC_HandleTypeDef* hadc4, ADC_HandleTypeDef* hadc5);
 void ADC1_ProcessBuffer(uint16_t* buffer);
 void ADC2_ProcessBuffer(uint16_t* buffer);
-void ADC3_ProcessBuffer(uint16_t* buffer);
-void ADC4_ProcessBuffer(uint16_t* buffer);
-void ADC5_ProcessBuffer(uint16_t* buffer);
+void ADC345_ProcessBuffer(uint16_t* buffer, uint8_t coil_offset);
+void PID_Solve3(uint8_t coil_offset);
+void PID_SetCCR3();
 
 #endif /* INC_ADC_H_ */

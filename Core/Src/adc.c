@@ -8,6 +8,7 @@
 
 #include "adc.h"
 #include "stm32g4xx_hal.h"
+#include <string.h>
 
 uint16_t ADC1_DMA_BUFFER[ADC1_CHANNELS*2];
 uint16_t ADC2_DMA_BUFFER[ADC2_CHANNELS*2];
@@ -20,50 +21,29 @@ uint16_t V_SENSE_HV = 0;
 uint16_t V_SENSE_12 = 0;
 uint16_t V_SENSE_5 = 0;
 
-uint16_t TEMP_SENSE_1 = 0;
-uint16_t TEMP_SENSE_2 = 0;
-uint16_t TEMP_SENSE_3 = 0;
-uint16_t TEMP_SENSE_4 = 0;
-uint16_t TEMP_SENSE_5 = 0;
-uint16_t TEMP_SENSE_6 = 0;
-uint16_t TEMP_SENSE_7 = 0;
-uint16_t TEMP_SENSE_8 = 0;
-uint16_t TEMP_SENSE_9 = 0;
-
-uint16_t COIL_CURRENT_1 = 0;
-uint16_t COIL_CURRENT_2 = 0;
-uint16_t COIL_CURRENT_3 = 0;
-uint16_t COIL_CURRENT_4 = 0;
-uint16_t COIL_CURRENT_5 = 0;
-uint16_t COIL_CURRENT_6 = 0;
-uint16_t COIL_CURRENT_7 = 0;
-uint16_t COIL_CURRENT_8 = 0;
-uint16_t COIL_CURRENT_9 = 0;
+uint16_t TEMP_SENSE[NUM_COILS];
+uint16_t COIL_CURRENT[NUM_COILS];
 
 // calculated values
 float v_sense_hv = 0;
 float v_sense_12 = 0;
 float v_sense_5 = 0;
 
-uint16_t coil_1_current_reading = 0;
-uint16_t coil_2_current_reading = 0;
-uint16_t coil_3_current_reading = 0;
-uint16_t coil_4_current_reading = 0;
-uint16_t coil_5_current_reading = 0;
-uint16_t coil_6_current_reading = 0;
-uint16_t coil_7_current_reading = 0;
-uint16_t coil_8_current_reading = 0;
-uint16_t coil_9_current_reading = 0;
+uint16_t coil_current_reading[NUM_COILS];
+int16_t coil_temp[NUM_COILS];
 
-int16_t coil_1_temp = 0;
-int16_t coil_2_temp = 0;
-int16_t coil_3_temp = 0;
-int16_t coil_4_temp = 0;
-int16_t coil_5_temp = 0;
-int16_t coil_6_temp = 0;
-int16_t coil_7_temp = 0;
-int16_t coil_8_temp = 0;
-int16_t coil_9_temp = 0;
+// PID
+#define PID_I_CLAMP 0.1f
+
+uint16_t coil_setpoint[NUM_COILS];
+uint16_t coil_pwm_ccr[NUM_COILS];
+int32_t pid_error[NUM_COILS] = {0};
+int32_t pid_error_integral[NUM_COILS] = {0};
+float pid_pwm_change[NUM_COILS] = {0};
+float pid_pwm_output[NUM_COILS] = {0};
+
+float Kp = 0.1f;
+float Ki = 0.0035f;
 
 // temp sense conversion deg C/100 = ((ADC/2^16)*3 + 0.4) * 0.0195 * 100
 #define CONVERT_TEMP_SENSE(x) ((x * 3.3f / 65535.0f - 0.5f) / 0.010f * 100.0f)
@@ -101,62 +81,26 @@ void ADC1_ProcessBuffer(uint16_t* buffer) {
 
 void ADC2_ProcessBuffer(uint16_t *buffer) {
 	// read the values from the ADC buffer
-	TEMP_SENSE_1 = buffer[0];
-	TEMP_SENSE_2 = buffer[1];
-	TEMP_SENSE_3 = buffer[2];
-    TEMP_SENSE_4 = buffer[3];
-    TEMP_SENSE_5 = buffer[4];
-    TEMP_SENSE_6 = buffer[5];
-    TEMP_SENSE_7 = buffer[6];
-    TEMP_SENSE_8 = buffer[7];
-    TEMP_SENSE_9 = buffer[8];
+	memcpy(TEMP_SENSE, buffer, sizeof(TEMP_SENSE));
 
     // calculate
-    coil_1_temp = CONVERT_TEMP_SENSE(TEMP_SENSE_1);
-    coil_2_temp = CONVERT_TEMP_SENSE(TEMP_SENSE_2);
-    coil_3_temp = CONVERT_TEMP_SENSE(TEMP_SENSE_3);
-    coil_4_temp = CONVERT_TEMP_SENSE(TEMP_SENSE_4);
-    coil_5_temp = CONVERT_TEMP_SENSE(TEMP_SENSE_5);
-    coil_6_temp = CONVERT_TEMP_SENSE(TEMP_SENSE_6);
-    coil_7_temp = CONVERT_TEMP_SENSE(TEMP_SENSE_7);
-    coil_8_temp = CONVERT_TEMP_SENSE(TEMP_SENSE_8);
-    coil_9_temp = CONVERT_TEMP_SENSE(TEMP_SENSE_9);
+	for (int i = 0; i < NUM_COILS; i++) {
+		coil_temp[i] = CONVERT_TEMP_SENSE(TEMP_SENSE[i]);
+	}
 }
 
-void ADC3_ProcessBuffer(uint16_t *buffer) {
-	// read the values from the ADC buffer
-	COIL_CURRENT_1 = buffer[0];
-	COIL_CURRENT_2 = buffer[1];
-	COIL_CURRENT_3 = buffer[2];
+void ADC345_ProcessBuffer(uint16_t *buffer, uint8_t coil_offset) {
+	// read the 3 values from the ADC buffer to the correct part of the coil_current
+	memcpy(&COIL_CURRENT[coil_offset], buffer, sizeof(COIL_CURRENT[0])*3);
 
 	// calculate measurements
-	coil_1_current_reading = CONVERT_EA_SENSE(COIL_CURRENT_1);
-	coil_2_current_reading = CONVERT_EA_SENSE(COIL_CURRENT_2);
-	coil_3_current_reading = CONVERT_EA_SENSE(COIL_CURRENT_3);
-}
+	for (int i = 0; i < 3; i++) {
+		coil_current_reading[i + coil_offset] = CONVERT_EA_SENSE(COIL_CURRENT[i + coil_offset]);
+	}
 
-void ADC4_ProcessBuffer(uint16_t *buffer) {
-	// read the values from the ADC buffer
-	COIL_CURRENT_4 = buffer[0];
-	COIL_CURRENT_5 = buffer[1];
-	COIL_CURRENT_6 = buffer[2];
-
-	// calculate measurements
-	coil_4_current_reading = CONVERT_EA_SENSE(COIL_CURRENT_4);
-	coil_5_current_reading = CONVERT_EA_SENSE(COIL_CURRENT_5);
-	coil_6_current_reading = CONVERT_EA_SENSE(COIL_CURRENT_6);
-}
-
-void ADC5_ProcessBuffer(uint16_t *buffer) {
-	// read the values from the ADC buffer
-	COIL_CURRENT_7 = buffer[0];
-	COIL_CURRENT_8 = buffer[1];
-	COIL_CURRENT_9 = buffer[2];
-
-	// calculate measurements
-	coil_7_current_reading = CONVERT_EA_SENSE(COIL_CURRENT_7);
-	coil_8_current_reading = CONVERT_EA_SENSE(COIL_CURRENT_8);
-	coil_9_current_reading = CONVERT_EA_SENSE(COIL_CURRENT_9);
+	// run the PID controller
+	PID_Solve3(coil_offset);
+	PID_SetCCR3(coil_offset);
 }
 
 void HAL_ADC_HalfConvCpltCallback(ADC_HandleTypeDef* hadc) {
@@ -165,11 +109,11 @@ void HAL_ADC_HalfConvCpltCallback(ADC_HandleTypeDef* hadc) {
 	} else if (hadc->Instance == ADC2) {
 		ADC2_ProcessBuffer(&ADC2_DMA_BUFFER[0]);
 	} else if (hadc->Instance == ADC3) {
-		ADC3_ProcessBuffer(&ADC3_DMA_BUFFER[0]);
+		ADC345_ProcessBuffer(&ADC3_DMA_BUFFER[0], 0);
 	} else if (hadc->Instance == ADC4) {
-		ADC4_ProcessBuffer(&ADC4_DMA_BUFFER[0]);
+		ADC345_ProcessBuffer(&ADC4_DMA_BUFFER[0], 3);
 	} else if (hadc->Instance == ADC5) {
-		ADC5_ProcessBuffer(&ADC5_DMA_BUFFER[0]);
+		ADC345_ProcessBuffer(&ADC5_DMA_BUFFER[0], 6);
 	}
 }
 
@@ -179,10 +123,76 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 	} else if (hadc->Instance == ADC2) {
 		ADC2_ProcessBuffer(&ADC2_DMA_BUFFER[ADC2_CHANNELS]);
 	} else if (hadc->Instance == ADC3) {
-		ADC3_ProcessBuffer(&ADC3_DMA_BUFFER[ADC3_CHANNELS]);
+		ADC345_ProcessBuffer(&ADC3_DMA_BUFFER[ADC3_CHANNELS], 0);
 	} else if (hadc->Instance == ADC4) {
-		ADC4_ProcessBuffer(&ADC4_DMA_BUFFER[ADC4_CHANNELS]);
+		ADC345_ProcessBuffer(&ADC4_DMA_BUFFER[ADC4_CHANNELS], 3);
 	} else if (hadc->Instance == ADC5) {
-		ADC5_ProcessBuffer(&ADC5_DMA_BUFFER[ADC5_CHANNELS]);
+		ADC345_ProcessBuffer(&ADC5_DMA_BUFFER[ADC5_CHANNELS], 6);
+	}
+}
+
+void PID_SetCCR3() {
+	// set the PWM output for the coils
+	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, coil_pwm_ccr[0]);
+	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, coil_pwm_ccr[1]);
+	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, coil_pwm_ccr[2]);
+	__HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_1, coil_pwm_ccr[3]);
+	__HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_2, coil_pwm_ccr[4]);
+	__HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_3, coil_pwm_ccr[5]);
+	__HAL_TIM_SET_COMPARE(&htim20, TIM_CHANNEL_1, coil_pwm_ccr[6]);
+	__HAL_TIM_SET_COMPARE(&htim20, TIM_CHANNEL_2, coil_pwm_ccr[7]);
+	__HAL_TIM_SET_COMPARE(&htim20, TIM_CHANNEL_3, coil_pwm_ccr[8]);
+}
+
+//		EA_SENSE_1 = HAL_ADC_GetValue(hadc);
+//		coil_current_1 = (float) EA_SENSE_1 / 65535.0f * 3.0f / 0.12f;
+//		if (current_setpoint > 3 || coil_current_1 > 3.2) {
+//			TIM1->CCR1 = 0;
+//			current_setpoint = 0;
+//			return;
+//		}
+//		pid_error = current_setpoint - coil_current_1;
+//		pid_error_integral += pid_error;
+//		// clamp integral to +- 10
+//		if (pid_error_integral > PID_I_CLAMP) {
+//			pid_error_integral = PID_I_CLAMP;
+//		} else if (pid_error_integral < -PID_I_CLAMP) {
+//			pid_error_integral = -PID_I_CLAMP;
+//		}
+//		pid_pwm_change = Kp * pid_error + Ki * pid_error_integral;
+//		pid_pwm_output += pid_pwm_change;
+//		if (pid_pwm_output >= 0.98f) {
+//			pid_pwm_output = 0.98f;
+//		} else if (pid_pwm_output < 0.0f) {
+//			pid_pwm_output = 0.0f;
+//		}
+//		coil_pwm_ccr_1 = pid_pwm_output * 1600.0f;
+//		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, coil_pwm_ccr_1);
+
+// function below implements code from above but using variables from this file
+
+void PID_Solve3(uint8_t coil_offset) {
+	for (int i = coil_offset; i < (3 + coil_offset); i++) {
+		if (coil_setpoint[i] > 3000 || coil_current_reading[i] > 3200) {
+			coil_pwm_ccr[i] = 0;
+			coil_setpoint[i] = 0;
+			return;
+		}
+		pid_error[i] = coil_setpoint[i] - coil_current_reading[i];
+		pid_error_integral[i] += pid_error[i];
+		// clamp integral to +- 10
+		if (pid_error_integral[i] > PID_I_CLAMP) {
+			pid_error_integral[i] = PID_I_CLAMP;
+		} else if (pid_error_integral[i] < -PID_I_CLAMP) {
+			pid_error_integral[i] = -PID_I_CLAMP;
+		}
+		pid_pwm_change[i] = Kp * (float)pid_error[i]/1000.0f + Ki * (float)pid_error_integral[i]/1000.0f;
+		pid_pwm_output[i] += pid_pwm_change[i];
+		if (pid_pwm_output[i] >= 0.98f) {
+			pid_pwm_output[i] = 0.98f;
+		} else if (pid_pwm_output[i] < 0.0f) {
+			pid_pwm_output[i] = 0.0f;
+		}
+		coil_pwm_ccr[i] = pid_pwm_output[i] * 1600.0f;
 	}
 }
