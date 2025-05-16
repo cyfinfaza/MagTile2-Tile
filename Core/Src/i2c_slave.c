@@ -18,7 +18,7 @@ static I2C_HandleTypeDef* i2c_handle;
 
 uint8_t myAddr;
 
-extern uint8_t can_blink;
+extern uint8_t i2c_blink;
 
 void I2C_Slave_Init(I2C_HandleTypeDef* hi2c) {
     i2c_handle = hi2c;
@@ -39,7 +39,7 @@ void I2C_RegisterInit(uint8_t reg_addr, uint8_t size, I2C_RW_Access access,
 }
 
 void HAL_I2C_AddrCallback(I2C_HandleTypeDef *hi2c, uint8_t TransferDirection, uint16_t AddrMatchCode) {
-    can_blink = !can_blink;
+    i2c_blink = !i2c_blink;
 	if (TransferDirection == I2C_DIRECTION_TRANSMIT) {
         HAL_I2C_Slave_Seq_Receive_IT(hi2c, rx_buffer, 1, I2C_NEXT_FRAME);  // Expect register index
     } else if (current_reg < MAX_REGISTERS && i2c_register_map[current_reg].enabled) {

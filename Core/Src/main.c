@@ -95,9 +95,15 @@ volatile float coil_current_1 = 0;
 // PWM outputs
 uint16_t coil_pwm_ccr_1 = 0;
 
+// LED outputs
+uint8_t IND_R = 100;
+uint8_t IND_G = 0;
+uint8_t IND_B = 0;
+
 FDCAN_RxHeaderTypeDef rxHeader;
 uint8_t rxData[8];
-uint8_t can_blink = 1;
+uint8_t i2c_blink = 1;
+uint8_t can_blink = 0;
 
 // I2C RX buffer
 uint8_t i2cRxBuffer[I2C_BUFFER_SIZE];
@@ -185,16 +191,16 @@ int main(void)
 
 	// 1: green; 2: red; 3: blue
 	// set LED to red
-	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 0);
-	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, 100);
-	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 0);
+	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, IND_G);
+	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, IND_R);
+	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, IND_B);
 
 	// turn on LED pwm
 	HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
 	HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
 	HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
 
-//	HAL_Delay(1000);
+	HAL_Delay(1000);
 
 	uint8_t new_addr_switches = 0;
 	new_addr_switches |= !HAL_GPIO_ReadPin(ADDR_0_GPIO_Port, ADDR_0_Pin) << 5;
@@ -226,19 +232,32 @@ int main(void)
 	HAL_TIM_PWM_Start(&htim20, TIM_CHANNEL_3);
 
 	// start CAN
-//	HAL_FDCAN_Start(&hfdcan1);
-//	HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
-//	// allow all messages
-//	FDCAN_FilterTypeDef sFilterConfig;
-//	sFilterConfig.IdType = FDCAN_STANDARD_ID;
-//	sFilterConfig.FilterIndex = 0;
-//	sFilterConfig.FilterType = FDCAN_FILTER_MASK;
-//	sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
-//	sFilterConfig.FilterID1 = 0x00000000;
-//	sFilterConfig.FilterID2 = 0x00000000;
-//	if (HAL_FDCAN_ConfigFilter(&hfdcan1, &sFilterConfig) != HAL_OK) {
-//		Error_Handler();
-//	}
+	HAL_FDCAN_Start(&hfdcan1);
+	HAL_FDCAN_ConfigGlobalFilter(&hfdcan1,
+	    FDCAN_ACCEPT_IN_RX_FIFO0,  // Non-matching standard frames
+	    FDCAN_ACCEPT_IN_RX_FIFO0,  // Non-matching extended frames
+	    FDCAN_REJECT_REMOTE,       // Reject standard RTR frames
+	    FDCAN_REJECT_REMOTE);      // Reject extended RTR frames
+	HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
+	FDCAN_FilterTypeDef sFilterConfig;
+
+	// Standard ID filter
+	sFilterConfig.IdType = FDCAN_STANDARD_ID;
+	sFilterConfig.FilterIndex = 0;
+	sFilterConfig.FilterType = FDCAN_FILTER_MASK;
+	sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
+	sFilterConfig.FilterID1 = 0x000;        // Accept everything
+	sFilterConfig.FilterID2 = 0x000;
+	HAL_FDCAN_ConfigFilter(&hfdcan1, &sFilterConfig);
+
+	// Extended ID filter
+	sFilterConfig.IdType = FDCAN_EXTENDED_ID;
+	sFilterConfig.FilterIndex = 1;
+	sFilterConfig.FilterType = FDCAN_FILTER_MASK;
+	sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
+	sFilterConfig.FilterID1 = 0x00000000;   // Accept everything
+	sFilterConfig.FilterID2 = 0x00000000;
+	HAL_FDCAN_ConfigFilter(&hfdcan1, &sFilterConfig);
 
 //	 start I2C slave listen
 //	HAL_I2C_EnableListen_IT(&hi2c1);
@@ -268,9 +287,9 @@ int main(void)
 	I2C_Slave_Init(&hi2c1);
 
 	// set LED to yellow
-	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 0);
-	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, 10);
-	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 0);
+	IND_R = 20;
+	IND_G = 15;
+	IND_B = 0;
 
   /* USER CODE END 2 */
 
@@ -309,13 +328,18 @@ int main(void)
 		__HAL_TIM_SET_COMPARE(&htim20, TIM_CHANNEL_2, coil_pwm_ccr[7]);
 		__HAL_TIM_SET_COMPARE(&htim20, TIM_CHANNEL_3, coil_pwm_ccr[8]);
 
+		// set LED
+		__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, IND_G);
+		__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, IND_R);
+		__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, IND_B);
+
 		HAL_Delay(10);
 
 		// set blue LED to CAN blink
 		if (can_blink) {
-			__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 30);
+			IND_B = 100;
 		} else {
-			__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 0);
+			IND_B = 0;
 		}
 
 	}
@@ -861,7 +885,7 @@ static void MX_FDCAN1_Init(void)
   /* USER CODE END FDCAN1_Init 1 */
   hfdcan1.Instance = FDCAN1;
   hfdcan1.Init.ClockDivider = FDCAN_CLOCK_DIV1;
-  hfdcan1.Init.FrameFormat = FDCAN_FRAME_CLASSIC;
+  hfdcan1.Init.FrameFormat = FDCAN_FRAME_FD_BRS;
   hfdcan1.Init.Mode = FDCAN_MODE_NORMAL;
   hfdcan1.Init.AutoRetransmission = DISABLE;
   hfdcan1.Init.TransmitPause = DISABLE;
@@ -870,10 +894,10 @@ static void MX_FDCAN1_Init(void)
   hfdcan1.Init.NominalSyncJumpWidth = 4;
   hfdcan1.Init.NominalTimeSeg1 = 13;
   hfdcan1.Init.NominalTimeSeg2 = 6;
-  hfdcan1.Init.DataPrescaler = 1;
-  hfdcan1.Init.DataSyncJumpWidth = 1;
-  hfdcan1.Init.DataTimeSeg1 = 1;
-  hfdcan1.Init.DataTimeSeg2 = 1;
+  hfdcan1.Init.DataPrescaler = 3;
+  hfdcan1.Init.DataSyncJumpWidth = 4;
+  hfdcan1.Init.DataTimeSeg1 = 11;
+  hfdcan1.Init.DataTimeSeg2 = 5;
   hfdcan1.Init.StdFiltersNbr = 0;
   hfdcan1.Init.ExtFiltersNbr = 0;
   hfdcan1.Init.TxFifoQueueMode = FDCAN_TX_FIFO_OPERATION;
@@ -1075,7 +1099,7 @@ static void MX_TIM3_Init(void)
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
   sConfigOC.Pulse = 50;
-  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_LOW;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
   {
@@ -1605,16 +1629,15 @@ static void MX_GPIO_Init(void)
 //}
 
 void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs) {
-//	if (hfdcan == &hfdcan1) {
-//		FDCAN_RxHeaderTypeDef rx_header;
-//		uint8_t rx_data[8];
-//		if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &rx_header, rx_data)
-//				!= HAL_OK) {
-//			Error_Handler();
-//		}
-		// toggle can blink
-		can_blink = !can_blink;
-//	}
+	if (hfdcan == &hfdcan1) {
+		FDCAN_RxHeaderTypeDef rx_header;
+		uint8_t rx_data[64];
+		if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &rx_header, rx_data)
+				!= HAL_OK) {
+			Error_Handler();
+		}
+		can_blink = ++can_blink % 2;
+	}
 }
 
 ///**
