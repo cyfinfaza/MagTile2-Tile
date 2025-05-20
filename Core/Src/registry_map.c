@@ -11,7 +11,7 @@
 
 extern MT2_Slave_Status slave_status;
 extern MT2_Slave_Faults slave_faults;
-extern MT2_Master_Status master_status;
+extern MT2_Global_State global_state;
 extern MT2_Slave_Settings slave_settings;
 
 extern float v_sense_5;
@@ -31,7 +31,7 @@ extern uint8_t adj_south_addr;
 const Registry_RegConfig registry_table[REGISTRY_COUNT] = {
 	Registry_DEFINE(0x04, &slave_status, Registry_READONLY),
 	Registry_DEFINE(0x05, &slave_faults, Registry_READONLY),
-	Registry_DEFINE(0x06, &master_status, Registry_READWRITE),
+	Registry_DEFINE(0x06, &global_state, Registry_READWRITE),
 	Registry_DEFINE(0x07, &slave_settings, Registry_READWRITE),
 
 	Registry_DEFINE(0x08, &v_sense_5, Registry_READONLY),

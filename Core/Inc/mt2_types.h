@@ -39,7 +39,7 @@ typedef union {
 		uint8_t global_arm: 1;
 		uint8_t global_fault_clear: 1;
 	} flags;
-} MT2_Master_Status;
+} MT2_Global_State;
 
 typedef union {
 	uint8_t byte;

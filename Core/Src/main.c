@@ -82,7 +82,7 @@ uint8_t my_address = 0x00;
 
 MT2_Slave_Status slave_status;
 MT2_Slave_Faults slave_faults;
-MT2_Master_Status master_status;
+MT2_Global_State global_state;
 MT2_Slave_Settings slave_settings;
 
 uint16_t mcu_temp;
