@@ -291,7 +291,7 @@ int main(void)
 
 		Telemetry_Loop();
 
-		HAL_Delay(10);
+//		HAL_Delay(10);
 
 		// set blue LED to CAN blink
 		if (i2c_blink) {

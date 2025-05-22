@@ -8,7 +8,7 @@
 #ifndef INC_TELEMETRY_H_
 #define INC_TELEMETRY_H_
 
-#define MAX_INTERVAL 500 // ms
+#define MAX_INTERVAL 100 // ms
 
 void Telemetry_Init(void);
 

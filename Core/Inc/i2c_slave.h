@@ -14,7 +14,7 @@
 
 #include "mt2_types.h"
 
-#define MAX_REGISTERS 64
+#define TILE_REGISTRY_SIZE 64
 
 typedef struct {
     uint8_t size : 3;     // 1 to 4 bytes
@@ -23,7 +23,7 @@ typedef struct {
     void* mem_ptr;        // memory address for register data
 } I2C_Register;
 
-extern I2C_Register i2c_register_map[MAX_REGISTERS];
+extern I2C_Register i2c_register_map[TILE_REGISTRY_SIZE];
 
 void I2C_Slave_Init(I2C_HandleTypeDef* hi2c);
 void I2C_RegisterInit(uint8_t reg_addr, uint8_t size, MT2_RW_Access access, void *mem_ptr);

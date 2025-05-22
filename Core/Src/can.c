@@ -45,7 +45,7 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *which_fdcan, uint32_t RxFifo
 		uint8_t rx_data[64];
 		if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &rx_header, rx_data)
 				!= HAL_OK) {
-			Error_Handler();
+//			Error_Handler();
 		}
 		can_blink = ++can_blink % 2;
 	}
