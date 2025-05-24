@@ -26,6 +26,7 @@
 #include "can.h"
 #include "adc.h"
 #include "telemetry.h"
+#include "graph_uart.h"
 
 /* USER CODE END Includes */
 
@@ -242,10 +243,14 @@ int main(void)
 
 	I2C_Slave_Init(&hi2c1);
 
+	GraphUART_Init(&huart2, &huart4, &huart3, &huart1);
+
 	// set LED to yellow
 	IND_R = 20;
 	IND_G = 15;
 	IND_B = 0;
+
+	uint32_t graph_uart_start = HAL_GetTick();
 
   /* USER CODE END 2 */
 
@@ -292,6 +297,11 @@ int main(void)
 		Telemetry_Loop();
 
 //		HAL_Delay(10);
+
+		if (HAL_GetTick() - graph_uart_start > 100) {
+			graph_uart_start = HAL_GetTick();
+			GraphUART_PeriodicUpdate();
+		}
 
 		// set blue LED to CAN blink
 		if (i2c_blink) {
@@ -845,8 +855,8 @@ static void MX_FDCAN1_Init(void)
   hfdcan1.Init.ClockDivider = FDCAN_CLOCK_DIV1;
   hfdcan1.Init.FrameFormat = FDCAN_FRAME_FD_BRS;
   hfdcan1.Init.Mode = FDCAN_MODE_NORMAL;
-  hfdcan1.Init.AutoRetransmission = DISABLE;
-  hfdcan1.Init.TransmitPause = DISABLE;
+  hfdcan1.Init.AutoRetransmission = ENABLE;
+  hfdcan1.Init.TransmitPause = ENABLE;
   hfdcan1.Init.ProtocolException = DISABLE;
   hfdcan1.Init.NominalPrescaler = 17;
   hfdcan1.Init.NominalSyncJumpWidth = 4;
