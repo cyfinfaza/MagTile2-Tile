@@ -246,8 +246,8 @@ int main(void)
 	GraphUART_Init(&huart2, &huart4, &huart3, &huart1);
 
 	// set LED to yellow
-	IND_R = 20;
-	IND_G = 15;
+	IND_R = 100;
+	IND_G = 75;
 	IND_B = 0;
 
 	uint32_t graph_uart_start = HAL_GetTick();
