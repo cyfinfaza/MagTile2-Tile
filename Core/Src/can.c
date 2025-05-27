@@ -6,10 +6,15 @@
  */
 
 #include "can.h"
+#include "registry.h"
+#include <stdint.h>
+#include <string.h>
 
 FDCAN_HandleTypeDef *hfdcan;
 
 extern uint8_t can_blink;
+
+extern uint8_t my_address;
 
 void CAN_Init(FDCAN_HandleTypeDef *can_selection) {
 	hfdcan = can_selection;
@@ -47,6 +52,21 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *which_fdcan, uint32_t RxFifo
 				!= HAL_OK) {
 //			Error_Handler();
 		}
-		can_blink = ++can_blink % 2;
+		can_blink = (can_blink + 1) % 2;
+		uint8_t addr = rx_header.Identifier & 0xFF;
+		if ((addr & 0xFF) != my_address) {
+			return; // not for me
+		}
+		uint8_t reg = rx_data[0];
+		uint8_t len = rx_header.DataLength;
+		if (len > 4) {
+			return; // too long
+		}
+		// check if the register is enabled and writable
+		if (reg < registry_count && registry_table[reg].enabled
+				&& registry_table[reg].access == Registry_READWRITE) {
+			// copy the data to the register
+			memcpy((void *)registry_table[reg].addr, &rx_data[1], len);
+		}
 	}
 }

@@ -15,13 +15,13 @@ static uint8_t current_reg = 0xFF;
 
 static I2C_HandleTypeDef* i2c_handle;
 
-uint8_t myAddr;
+uint8_t my_i2c_address;
 
 extern uint8_t i2c_blink;
 
 void I2C_Slave_Init(I2C_HandleTypeDef* hi2c) {
     i2c_handle = hi2c;
-    myAddr = hi2c->Init.OwnAddress1;
+    my_i2c_address = hi2c->Init.OwnAddress1;
 
     // No longer need to register manually — myAddr must be defined in registry_table[] externally
 

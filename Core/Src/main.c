@@ -238,6 +238,7 @@ int main(void)
 	CAN_Init(&hfdcan1);
 
 	slave_status.flags.alive = 1;
+	slave_status.flags.arm_active = 1;
 
 	Telemetry_Init();
 
@@ -246,8 +247,8 @@ int main(void)
 	GraphUART_Init(&huart2, &huart4, &huart3, &huart1);
 
 	// set LED to yellow
-	IND_R = 100;
-	IND_G = 75;
+	IND_R = 8;
+	IND_G = 6;
 	IND_B = 0;
 
 	uint32_t graph_uart_start = HAL_GetTick();
@@ -303,11 +304,29 @@ int main(void)
 			GraphUART_PeriodicUpdate();
 		}
 
+		// check if any coils are on
+		for (int i = 0; i < 9; i++) {
+			if (coil_setpoint[i] > 0) {
+				slave_status.flags.coils_nonzero = 1;
+				break;
+			} else {
+				slave_status.flags.coils_nonzero = 0;
+			}
+
+		}
+
 		// set blue LED to CAN blink
-		if (i2c_blink) {
-			IND_B = 100;
+		if (can_blink) {
+			IND_B = 20;
 		} else {
 			IND_B = 0;
+		}
+
+		// turn on green LED if coils on
+		if (slave_status.flags.coils_nonzero) {
+			IND_G = 100;
+		} else {
+			IND_G = 0;
 		}
 
 	}
