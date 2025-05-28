@@ -16,6 +16,8 @@ extern uint8_t can_blink;
 
 extern uint8_t my_address;
 
+uint32_t can_last_heard_from_master = 0;
+
 void CAN_Init(FDCAN_HandleTypeDef *can_selection) {
 	hfdcan = can_selection;
 	HAL_FDCAN_Start(hfdcan);
@@ -52,11 +54,12 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *which_fdcan, uint32_t RxFifo
 				!= HAL_OK) {
 //			Error_Handler();
 		}
-		can_blink = (can_blink + 1) % 2;
 		uint8_t addr = rx_header.Identifier & 0xFF;
-		if ((addr & 0xFF) != my_address) {
+		if ((addr != my_address) && (addr != 0)) {
 			return; // not for me
 		}
+		can_blink = 1;
+		can_last_heard_from_master = HAL_GetTick();
 		uint8_t reg = rx_data[0];
 		uint8_t len = rx_header.DataLength;
 		if (len > 4) {

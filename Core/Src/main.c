@@ -27,6 +27,7 @@
 #include "adc.h"
 #include "telemetry.h"
 #include "graph_uart.h"
+#include "safety_config.h"
 
 /* USER CODE END Includes */
 
@@ -39,6 +40,8 @@
 /* USER CODE BEGIN PD */
 
 #define I2C_BUFFER_SIZE 2
+#define CAN_BLINK_FREQ 200 // ms
+#define CAN_BLINK_TIME 100 // ms
 
 /* USER CODE END PD */
 
@@ -203,7 +206,7 @@ int main(void)
 	HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
 	HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
 
-	HAL_Delay(1000);
+//	HAL_Delay(1000);
 
 	uint8_t new_addr_switches = 0;
 	new_addr_switches |= !HAL_GPIO_ReadPin(ADDR_0_GPIO_Port, ADDR_0_Pin) << 5;
@@ -238,7 +241,6 @@ int main(void)
 	CAN_Init(&hfdcan1);
 
 	slave_status.flags.alive = 1;
-	slave_status.flags.arm_active = 1;
 
 	Telemetry_Init();
 
@@ -253,6 +255,9 @@ int main(void)
 
 	uint32_t graph_uart_start = HAL_GetTick();
 
+	uint32_t can_blink_start = HAL_GetTick();
+	uint8_t led_off = 0; // flag to indicate if led is off
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -264,20 +269,6 @@ int main(void)
 
 		// read digital inputs
 		BOOT0_SENSE = HAL_GPIO_ReadPin(BOOT0_SENSE_GPIO_Port, BOOT0_SENSE_Pin);
-
-		// read analog inputs
-//		HAL_ADC_Start(&hadc1);
-//		HAL_ADC_PollForConversion(&hadc1, 100);
-//		V_SENSE_HV = HAL_ADC_GetValue(&hadc1);
-//		HAL_ADC_PollForConversion(&hadc1, 100);
-//		V_SENSE_12 = HAL_ADC_GetValue(&hadc1);
-//		HAL_ADC_PollForConversion(&hadc1, 100);
-//		V_SENSE_5 = HAL_ADC_GetValue(&hadc1);
-
-		// calculate analog values
-//		v_sense_12 = V_SENSE_12 * 0.0080566406;
-//		v_sense_5 = V_SENSE_5 * 0.0014648438;
-//		v_sense_hv = V_SENSE_HV * 0.0194091797;
 
 		// set timer output
 		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, coil_pwm_ccr[0]);
@@ -295,13 +286,12 @@ int main(void)
 		__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, IND_R);
 		__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, IND_B);
 
-		Telemetry_Loop();
 
-//		HAL_Delay(10);
+		// STATE MACHINE START
 
-		if (HAL_GetTick() - graph_uart_start > 100) {
-			graph_uart_start = HAL_GetTick();
-			GraphUART_PeriodicUpdate();
+		// check global state parameters
+		if (global_state.flags.global_fault_clear || slave_settings.flags.local_fault_clear) {
+			slave_status.flags.shutdown_from_fault = 0;
 		}
 
 		// check if any coils are on
@@ -312,21 +302,79 @@ int main(void)
 			} else {
 				slave_status.flags.coils_nonzero = 0;
 			}
-
 		}
 
-		// set blue LED to CAN blink
-		if (can_blink) {
-			IND_B = 20;
+		if (!slave_status.flags.arm_active && !slave_status.flags.shutdown_from_fault) {
+			slave_faults.flags.communication_fault = 0;
+		}
+
+		if (HAL_GetTick() - can_last_heard_from_master > CAN_TIMEOUT) {
+			slave_faults.flags.communication_fault = 1;
+		}
+
+		// check for faults and disarm
+		if (slave_status.flags.arm_active && slave_faults.byte) {
+			slave_status.flags.shutdown_from_fault = 1;
+			slave_status.flags.arm_active = 0;
+		}
+
+		if (slave_faults.byte)
+			slave_status.flags.arm_ready = 0;
+		else
+			slave_status.flags.arm_ready = 1;
+
+
+		// now finally if there are no faults and the global arm request is on
+		if (global_state.flags.global_arm && !slave_faults.byte) {
+			slave_status.flags.arm_active = 1;
 		} else {
+			slave_status.flags.arm_active = 0;
+		}
+
+
+		// POST STATE MACHINE
+
+		if (slave_status.flags.coils_nonzero) { // Blue: coils are on
+			IND_R = 0;
+			IND_G = 0;
+			IND_B = 100;
+		} else if (slave_status.flags.arm_active) { // Green: armed
+			IND_R = 0;
+			IND_G = 100;
+			IND_B = 0;
+		} else if (slave_faults.byte) { // Red: fault
+			IND_R = 100;
+			IND_G = 0;
+			IND_B = 0;
+		} else { // Yellow: idle
+			IND_R = 100;
+			IND_G = 100;
 			IND_B = 0;
 		}
 
-		// turn on green LED if coils on
-		if (slave_status.flags.coils_nonzero) {
-			IND_G = 100;
-		} else {
+	    // turn can led off for CAN_BLINK_TIME every CAN_BLINK_FREQ ms
+		if (HAL_GetTick() - can_blink_start > CAN_BLINK_FREQ) {
+			can_blink_start = HAL_GetTick();
+			if (!can_blink) led_off = 1;
+			can_blink = 0;
+		}
+
+		if (HAL_GetTick() - can_blink_start > CAN_BLINK_TIME) {
+			led_off = 0;
+		}
+
+		if (led_off) {
+			IND_R = 0;
 			IND_G = 0;
+			IND_B = 0; // turn off LED
+		}
+
+
+		Telemetry_Loop();
+
+		if (HAL_GetTick() - graph_uart_start > 100) {
+			graph_uart_start = HAL_GetTick();
+			GraphUART_PeriodicUpdate();
 		}
 
 	}

@@ -65,6 +65,7 @@ void ADC_Init(ADC_HandleTypeDef* hadc1, ADC_HandleTypeDef* hadc2, ADC_HandleType
 void ADC1_ProcessBuffer(uint16_t* buffer);
 void ADC2_ProcessBuffer(uint16_t* buffer);
 void ADC345_ProcessBuffer(uint16_t* buffer, uint8_t coil_offset);
+void PID_DisableAll();
 void PID_Solve3(uint8_t coil_offset);
 void PID_SetCCR3();
 

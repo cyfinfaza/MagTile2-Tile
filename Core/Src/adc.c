@@ -9,6 +9,8 @@
 #include "adc.h"
 #include "stm32g4xx_hal.h"
 #include <string.h>
+#include "safety_config.h"
+#include "mt2_types.h"
 
 uint16_t ADC1_DMA_BUFFER[ADC1_CHANNELS*2];
 uint16_t ADC2_DMA_BUFFER[ADC2_CHANNELS*2];
@@ -42,8 +44,11 @@ int32_t pid_error_integral[NUM_COILS] = {0};
 float pid_pwm_change[NUM_COILS] = {0};
 float pid_pwm_output[NUM_COILS] = {0};
 
-float Kp = 0.1f;
-float Ki = 0.0035f;
+float Kp = 0.005f;
+float Ki = 0.0005f;
+
+extern MT2_Slave_Faults slave_faults;
+extern MT2_Slave_Status slave_status;
 
 // temp sense conversion deg C/100 = ((ADC/2^16)*3 + 0.4) * 0.0195 * 100
 #define CONVERT_TEMP_SENSE(x) ((x * 3.3f / 65535.0f - 0.5f) / 0.010f * 100.0f)
@@ -83,9 +88,16 @@ void ADC2_ProcessBuffer(uint16_t *buffer) {
 	// read the values from the ADC buffer
 	memcpy(TEMP_SENSE, buffer, sizeof(TEMP_SENSE));
 
+	if (!slave_status.flags.arm_active && !slave_status.flags.shutdown_from_fault) {
+		slave_faults.flags.temp_fault = 0; // clear temp sense fault if not armed
+	}
+
     // calculate
 	for (int i = 0; i < NUM_COILS; i++) {
 		coil_temp[i] = CONVERT_TEMP_SENSE(TEMP_SENSE[i]);
+		if (coil_temp[i] > MAX_TEMP || coil_temp[i] < MIN_TEMP) {
+			slave_faults.flags.temp_fault = 1;
+		}
 	}
 }
 
@@ -144,6 +156,16 @@ void PID_SetCCR3() {
 	__HAL_TIM_SET_COMPARE(&htim20, TIM_CHANNEL_3, coil_pwm_ccr[8]);
 }
 
+void PID_DisableAll() {
+	for (int i = 0; i < 9; i++) {
+		coil_pwm_ccr[i] = 0;
+		coil_setpoint[i] = 0;
+		pid_pwm_output[i] = 0;
+		pid_error_integral[i] = 0;
+	}
+	PID_SetCCR3();
+}
+
 //		EA_SENSE_1 = HAL_ADC_GetValue(hadc);
 //		coil_current_1 = (float) EA_SENSE_1 / 65535.0f * 3.0f / 0.12f;
 //		if (current_setpoint > 3 || coil_current_1 > 3.2) {
@@ -172,8 +194,22 @@ void PID_SetCCR3() {
 // function below implements code from above but using variables from this file
 
 void PID_Solve3(uint8_t coil_offset) {
+	if (!slave_status.flags.arm_active && !slave_status.flags.shutdown_from_fault) {
+		slave_faults.flags.current_spike_fault = 0;
+		slave_faults.flags.invalid_value_fault = 0;
+	}
+	if (slave_faults.byte || !slave_status.flags.arm_active) {
+		PID_DisableAll();
+		return;
+	}
 	for (int i = coil_offset; i < (3 + coil_offset); i++) {
-		if (coil_setpoint[i] > 3000 || coil_current_reading[i] > 3200) {
+		if (coil_setpoint[i] > MAX_SETPOINT) {
+			slave_faults.flags.invalid_value_fault = 1;
+		}
+		if (coil_current_reading[i] > MAX_SPIKE) {
+			slave_faults.flags.current_spike_fault = 1;
+		}
+		if (coil_setpoint[i] > MAX_SETPOINT || coil_current_reading[i] > MAX_SPIKE) {
 			coil_pwm_ccr[i] = 0;
 			coil_setpoint[i] = 0;
 			return;

@@ -9,6 +9,7 @@
 #define INC_TELEMETRY_H_
 
 #define MAX_INTERVAL 100 // ms
+#define FAULT_SEND_INTERVAL 10 // ms
 
 void Telemetry_Init(void);
 
