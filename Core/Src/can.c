@@ -61,7 +61,7 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *which_fdcan, uint32_t RxFifo
 		can_blink = 1;
 		can_last_heard_from_master = HAL_GetTick();
 		uint8_t reg = rx_data[0];
-		uint8_t len = rx_header.DataLength;
+		uint8_t len = rx_header.DataLength - 1;
 		if (len > 4) {
 			return; // too long
 		}
