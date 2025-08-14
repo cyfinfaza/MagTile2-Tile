@@ -248,6 +248,13 @@ int main(void)
 
 	GraphUART_Init(&huart2, &huart4, &huart3, &huart1);
 
+	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk; // Enable trace
+	ITM->LAR  = 0xC5ACCE55;                         // Unlock ITM
+	ITM->TCR  = ITM_TCR_ITMENA_Msk |                // Enable ITM
+				ITM_TCR_SYNCENA_Msk |               // Enable sync packets (optional)
+				ITM_TCR_TSENA_Msk;                  // Enable timestamping (optional)
+	ITM->TER  = 0xFFFFFFFF;                         // Enable all stimulus ports
+
 	// set LED to yellow
 	IND_R = 8;
 	IND_G = 6;
@@ -463,8 +470,8 @@ static void MX_ADC1_Init(void)
   hadc1.Init.DMAContinuousRequests = ENABLE;
   hadc1.Init.Overrun = ADC_OVR_DATA_PRESERVED;
   hadc1.Init.OversamplingMode = ENABLE;
-  hadc1.Init.Oversampling.Ratio = ADC_OVERSAMPLING_RATIO_64;
-  hadc1.Init.Oversampling.RightBitShift = ADC_RIGHTBITSHIFT_6;
+  hadc1.Init.Oversampling.Ratio = ADC_OVERSAMPLING_RATIO_256;
+  hadc1.Init.Oversampling.RightBitShift = ADC_RIGHTBITSHIFT_4;
   hadc1.Init.Oversampling.TriggeredMode = ADC_TRIGGEREDMODE_SINGLE_TRIGGER;
   hadc1.Init.Oversampling.OversamplingStopReset = ADC_REGOVERSAMPLING_CONTINUED_MODE;
   if (HAL_ADC_Init(&hadc1) != HAL_OK)
@@ -1678,8 +1685,7 @@ void Error_Handler(void)
 	}
   /* USER CODE END Error_Handler_Debug */
 }
-
-#ifdef  USE_FULL_ASSERT
+#ifdef USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number
   *         where the assert_param error has occurred.
