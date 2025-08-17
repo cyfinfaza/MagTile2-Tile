@@ -8,6 +8,10 @@
 #ifndef INC_MT2_TYPES_H_
 #define INC_MT2_TYPES_H_
 
+#define FAULT_REPORT_PRIORITY 0
+#define MASTER_OUT_PRIORITY 1
+#define TELEMETRY_PRIORITY 2
+
 typedef enum {
 	READONLY = 0,
 	READWRITE = 1,
@@ -32,6 +36,7 @@ typedef union {
 		uint8_t vsense_fault: 1; // TODO
 		uint8_t invalid_value_fault: 1;
 		uint8_t communication_fault: 1;
+		uint8_t address_conflict: 1;
 	} flags;
 } MT2_Slave_Faults;
 

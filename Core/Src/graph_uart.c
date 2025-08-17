@@ -7,8 +7,11 @@
 
 #include "graph_uart.h"
 #include "stm32g4xx_hal.h"
+#include "mt2_types.h"
 
 extern uint8_t my_address;
+extern MT2_Slave_Status slave_status;
+extern MT2_Slave_Faults slave_faults;
 
 uint8_t transmit_buffer[2];
 
@@ -76,12 +79,64 @@ void GraphUART_PeriodicUpdate() {
 	uint32_t now = HAL_GetTick();
 
 #define X(dir) \
-	HAL_UART_Transmit_IT(huart_##dir, transmit_buffer, 2); \
+	if(!slave_faults.flags.communication_fault || slave_status.flags.shutdown_from_fault) \
+		HAL_UART_Transmit_IT(huart_##dir, transmit_buffer, 2); \
 	if (now - last_seen_##dir > GRAPHUART_TIMEOUT) { \
 		adj_##dir##_addr = 0; \
 	}
 	DIRECTION_XMACRO
 #undef X
+}
+
+// One-call jump into the STM32G47x ROM bootloader (System Memory).
+// Works without touching option bytes or BOOT0 pin.
+//
+// Call this from thread context (not inside an IRQ).
+// Does not return.
+//
+// Written by ChatGPT
+__attribute__((noreturn))
+static void JumpToBootloader_G4(void)
+{
+    typedef void (*pFunction)(void);
+    const uint32_t SYSMEM_BASE = 0x1FFF0000UL; // STM32G4 system memory base (AN2606)
+
+    __disable_irq();
+
+    /* Stop SysTick */
+    SysTick->CTRL = 0;
+    SysTick->LOAD = 0;
+    SysTick->VAL  = 0;
+
+    /* Deinit peripherals and clocks back to reset state */
+    HAL_RCC_DeInit();
+    HAL_DeInit();
+
+    /* Fully mask & clear NVIC to avoid stray IRQs after VTOR switch */
+    for (uint32_t i = 0; i < 8; i++) {              // 8 words = up to 256 IRQs on CM4
+        NVIC->ICER[i] = 0xFFFFFFFFUL;               // disable
+        NVIC->ICPR[i] = 0xFFFFFFFFUL;               // clear pending
+    }
+    __DSB(); __ISB();
+
+    /* Optional: remap System Memory at 0x00000000 (supported on G4) */
+    __HAL_RCC_SYSCFG_CLK_ENABLE();
+    __HAL_SYSCFG_REMAPMEMORY_SYSTEMFLASH();
+
+    /* Also point VTOR at System Memory (belt-and-suspenders) */
+    SCB->VTOR = SYSMEM_BASE;
+
+    /* Load MSP and the bootloader entry (Reset_Handler) from System Memory */
+    uint32_t boot_msp   = *(__IO uint32_t *)(SYSMEM_BASE + 0x00U);
+    uint32_t boot_entry = *(__IO uint32_t *)(SYSMEM_BASE + 0x04U);
+    pFunction Boot = (pFunction)boot_entry;
+
+    /* Set the Main Stack Pointer and jump */
+    __set_MSP(boot_msp);
+    __DSB(); __ISB();
+    Boot();
+
+    while (1) { /* never returns */ }
 }
 
 // UART receive callback
@@ -92,6 +147,9 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *incoming_huart, uint16_t siz
 		if (size == 2 && uart_rx_buffer[0] == 0x00) { \
 			adj_##dir##_addr = uart_rx_buffer[1]; \
 			last_seen_##dir = HAL_GetTick(); \
+		} \
+		else if (size == 1 && uart_rx_buffer[0] == 0x7F && !slave_status.flags.arm_active) { \
+			JumpToBootloader_G4(); \
 		} \
 		HAL_StatusTypeDef res = HAL_UARTEx_ReceiveToIdle_IT(huart_##dir, uart_rx_buffer_##dir, UART_BUFFER_SIZE); \
 		if (res != HAL_OK) { \

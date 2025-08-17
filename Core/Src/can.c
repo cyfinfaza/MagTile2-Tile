@@ -9,6 +9,7 @@
 #include "registry.h"
 #include <stdint.h>
 #include <string.h>
+#include "mt2_types.h"
 
 FDCAN_HandleTypeDef *hfdcan;
 
@@ -16,7 +17,9 @@ extern uint8_t can_blink;
 
 extern uint8_t my_address;
 
-uint32_t can_last_heard_from_master = 0;
+int32_t can_last_heard_from_master = 0;
+
+uint8_t address_conflict_detected = 0;
 
 void CAN_Init(FDCAN_HandleTypeDef *can_selection) {
 	hfdcan = can_selection;
@@ -57,6 +60,9 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *which_fdcan, uint32_t RxFifo
 		uint8_t addr = rx_header.Identifier & 0xFF;
 		if ((addr != my_address) && (addr != 0)) {
 			return; // not for me
+		}
+		if (rx_header.Identifier >> 8 != MASTER_OUT_PRIORITY) {
+			address_conflict_detected = 1;
 		}
 		can_blink = 1;
 		can_last_heard_from_master = HAL_GetTick();

@@ -67,6 +67,7 @@ FDCAN_HandleTypeDef hfdcan1;
 I2C_HandleTypeDef hi2c1;
 
 TIM_HandleTypeDef htim1;
+TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim6;
 TIM_HandleTypeDef htim8;
@@ -78,6 +79,8 @@ UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN PV */
+
+unsigned int hardware_tick = 0; // hardware tick counter
 
 // global variables for all digital inputs
 uint8_t BOOT0_SENSE;
@@ -111,6 +114,8 @@ uint8_t rxData[8];
 uint8_t i2c_blink = 0;
 uint8_t can_blink = 0;
 
+int32_t can_latency = 0; // time since last CAN message received
+
 // I2C RX buffer
 uint8_t i2cRxBuffer[I2C_BUFFER_SIZE];
 uint8_t i2cRxIndex = 0;
@@ -138,6 +143,7 @@ static void MX_USART1_UART_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_USART3_UART_Init(void);
 static void MX_TIM6_Init(void);
+static void MX_TIM2_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -193,7 +199,11 @@ int main(void)
   MX_USART2_UART_Init();
   MX_USART3_UART_Init();
   MX_TIM6_Init();
+  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
+
+  // start hardware tick timer
+  HAL_TIM_Base_Start(&htim2);
 
 	// 1: green; 2: red; 3: blue
 	// set LED to red
@@ -265,6 +275,25 @@ int main(void)
 	uint32_t can_blink_start = HAL_GetTick();
 	uint8_t led_off = 0; // flag to indicate if led is off
 
+//	FLASH_OBProgramInitTypeDef ob = {0};
+//
+//	HAL_FLASH_Unlock();
+//	HAL_FLASH_OB_Unlock();
+//
+//	// Read current OBs
+//	HAL_FLASHEx_OBGetConfig(&ob);
+//
+//	// Set BOOT0 source to option byte (nSWBOOT0 = 0)
+//	ob.OptionType = OPTIONBYTE_USER;
+//	ob.USERConfig = (ob.USERConfig & ~OB_USER_nSWBOOT0) | OB_USER_nBOOT0;
+//
+//	HAL_FLASHEx_OBProgram(&ob);
+//
+//	// Apply changes (this triggers a reset)
+//	HAL_FLASH_OB_Launch();
+//	JumpToBootloader_G4();
+
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -273,6 +302,9 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+
+		// set hardware tick
+		hardware_tick = __HAL_TIM_GET_COUNTER(&htim2) / 10;
 
 		// read digital inputs
 		BOOT0_SENSE = HAL_GPIO_ReadPin(BOOT0_SENSE_GPIO_Port, BOOT0_SENSE_Pin);
@@ -311,13 +343,15 @@ int main(void)
 			}
 		}
 
+		// CAN-related state
 		if (!slave_status.flags.arm_active && !slave_status.flags.shutdown_from_fault) {
 			slave_faults.flags.communication_fault = 0;
 		}
-
-		if (HAL_GetTick() - can_last_heard_from_master > CAN_TIMEOUT) {
+		can_latency = HAL_GetTick() - can_last_heard_from_master;
+		if (can_latency > CAN_TIMEOUT) {
 			slave_faults.flags.communication_fault = 1;
 		}
+		slave_faults.flags.address_conflict = address_conflict_detected;
 
 		// check for faults and disarm
 		if (slave_status.flags.arm_active && slave_faults.byte) {
@@ -1096,6 +1130,51 @@ static void MX_TIM1_Init(void)
 }
 
 /**
+  * @brief TIM2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM2_Init(void)
+{
+
+  /* USER CODE BEGIN TIM2_Init 0 */
+
+  /* USER CODE END TIM2_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM2_Init 1 */
+
+  /* USER CODE END TIM2_Init 1 */
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 16999;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 4294967295;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM2_Init 2 */
+
+  /* USER CODE END TIM2_Init 2 */
+
+}
+
+/**
   * @brief TIM3 Initialization Function
   * @param None
   * @retval None
@@ -1585,19 +1664,19 @@ static void MX_DMA_Init(void)
 
   /* DMA interrupt init */
   /* DMA1_Channel1_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 2, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 1, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
   /* DMA1_Channel2_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 2, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 3, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
   /* DMA1_Channel3_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 2, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
   /* DMA1_Channel4_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel4_IRQn, 2, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel4_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel4_IRQn);
   /* DMA1_Channel5_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 2, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel5_IRQn);
 
 }
