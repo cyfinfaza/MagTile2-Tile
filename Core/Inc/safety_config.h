@@ -12,6 +12,10 @@
 #define MAX_SETPOINT 4500
 #define MAX_SPIKE 4700
 
+// Input Voltage Rails
+#define MAX_HV_SAG 3.0f
+#define MAX_HV_SAG_TIME 200 // ms
+
 // Temp sensing
 #define MAX_TEMP 90.0f * 100.0f // 45 degrees C in C/100
 #define MIN_TEMP -20.0f * 100.0f // -20 degrees C in C/100

@@ -24,6 +24,9 @@ extern uint8_t adj_north_addr;
 extern uint8_t adj_east_addr;
 extern uint8_t adj_south_addr;
 
+extern uint16_t build_number;
+extern uint32_t main_loop_freq;
+
 #define REGISTRY_COUNT 255
 
 
@@ -37,7 +40,7 @@ const Registry_RegConfig registry_table[REGISTRY_COUNT] = {
 	Registry_DEFINE(0x08, &v_sense_5, Registry_READONLY),
 	Registry_DEFINE(0x09, &v_sense_12, Registry_READONLY),
 	Registry_DEFINE(0x0A, &v_sense_hv, Registry_READONLY),
-	Registry_DEFINE(0x0B, &mcu_temp, Registry_READONLY),
+	Registry_DEFINE(0x0B, &master_v_sense_hv, Registry_READWRITE),
 
 	Registry_DEFINE(0x0C, &adj_west_addr, Registry_READONLY),
 	Registry_DEFINE(0x0D, &adj_north_addr, Registry_READONLY),
@@ -71,6 +74,19 @@ const Registry_RegConfig registry_table[REGISTRY_COUNT] = {
 	Registry_DEFINE(0x36, &coil_temp[6], Registry_READONLY),
 	Registry_DEFINE(0x37, &coil_temp[7], Registry_READONLY),
 	Registry_DEFINE(0x38, &coil_temp[8], Registry_READONLY),
+	Registry_DEFINE(0x40, &coil_estimated_resistance_report[0], Registry_READONLY),
+	Registry_DEFINE(0x41, &coil_estimated_resistance_report[1], Registry_READONLY),
+	Registry_DEFINE(0x42, &coil_estimated_resistance_report[2], Registry_READONLY),
+	Registry_DEFINE(0x43, &coil_estimated_resistance_report[3], Registry_READONLY),
+	Registry_DEFINE(0x44, &coil_estimated_resistance_report[4], Registry_READONLY),
+	Registry_DEFINE(0x45, &coil_estimated_resistance_report[5], Registry_READONLY),
+	Registry_DEFINE(0x46, &coil_estimated_resistance_report[6], Registry_READONLY),
+	Registry_DEFINE(0x47, &coil_estimated_resistance_report[7], Registry_READONLY),
+	Registry_DEFINE(0x48, &coil_estimated_resistance_report[8], Registry_READONLY),
+
+	Registry_DEFINE(0xC0, &build_number, Registry_READONLY),
+	Registry_DEFINE(0xC1, &mcu_temp, Registry_READONLY),
+	Registry_DEFINE(0xC2, &main_loop_freq, Registry_READONLY),
 };
 
 const uint32_t registry_count = REGISTRY_COUNT;

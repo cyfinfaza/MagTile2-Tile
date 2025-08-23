@@ -42,6 +42,8 @@
 #define I2C_BUFFER_SIZE 2
 #define CAN_BLINK_FREQ 200 // ms
 #define CAN_BLINK_TIME 100 // ms
+#define ID_BLINK_FREQ 300 // ms
+#define ID_BLINK_TIME 100 // ms
 
 /* USER CODE END PD */
 
@@ -80,6 +82,9 @@ UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN PV */
 
+uint16_t build_number = 20;
+
+
 unsigned int hardware_tick = 0; // hardware tick counter
 
 // global variables for all digital inputs
@@ -92,8 +97,6 @@ MT2_Slave_Faults slave_faults;
 MT2_Global_State global_state;
 MT2_Slave_Settings slave_settings;
 
-uint16_t mcu_temp;
-
 uint8_t adj_west_addr;
 uint8_t adj_north_addr;
 uint8_t adj_east_addr;
@@ -104,22 +107,28 @@ volatile float coil_current_1 = 0;
 // PWM outputs
 uint16_t coil_pwm_ccr_1 = 0;
 
-// LED outputs
-uint8_t IND_R = 100;
-uint8_t IND_G = 0;
-uint8_t IND_B = 0;
-
 FDCAN_RxHeaderTypeDef rxHeader;
 uint8_t rxData[8];
 uint8_t i2c_blink = 0;
 uint8_t can_blink = 0;
 
 int32_t can_latency = 0; // time since last CAN message received
+uint8_t can_timeout = 0; // flag for CAN timeout
 
 // I2C RX buffer
 uint8_t i2cRxBuffer[I2C_BUFFER_SIZE];
 uint8_t i2cRxIndex = 0;
 uint8_t i2cDataReady = 0;
+
+uint32_t main_loop_counter = 0; // main loop counter for debugging
+volatile uint32_t adc3_loop_counter = 0; // adc1 loop counter for debugging
+volatile uint32_t adc4_loop_counter = 0; // adc2 loop counter for debugging
+volatile uint32_t adc5_loop_counter = 0; // adc3 loop counter for debugging
+uint32_t main_loop_freq = 0; // main loop frequency in Hz
+uint32_t adc3_loop_freq = 0; // adc1 loop frequency in Hz
+uint32_t adc4_loop_freq = 0; // adc2 loop frequency in Hz
+uint32_t adc5_loop_freq = 0; // adc3 loop frequency in Hz
+
 
 /* USER CODE END PV */
 
@@ -150,6 +159,16 @@ static void MX_TIM2_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+#define _set_rgb(r, g, b) \
+	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, (g)); \
+	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, (r)); \
+	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, (b)); \
+
+#define LED_BRIGHTNESS_DIVIDE 2
+void set_rgb(uint8_t r, uint8_t g, uint8_t b) {
+	_set_rgb(r/LED_BRIGHTNESS_DIVIDE, g/LED_BRIGHTNESS_DIVIDE, b/LED_BRIGHTNESS_DIVIDE);
+}
 
 /* USER CODE END 0 */
 
@@ -207,9 +226,7 @@ int main(void)
 
 	// 1: green; 2: red; 3: blue
 	// set LED to red
-	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, IND_G);
-	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, IND_R);
-	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, IND_B);
+	set_rgb(100, 0, 0);
 
 	// turn on LED pwm
 	HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
@@ -266,32 +283,16 @@ int main(void)
 	ITM->TER  = 0xFFFFFFFF;                         // Enable all stimulus ports
 
 	// set LED to yellow
-	IND_R = 8;
-	IND_G = 6;
-	IND_B = 0;
+	set_rgb(100, 100, 0);
 
 	uint32_t graph_uart_start = HAL_GetTick();
 
 	uint32_t can_blink_start = HAL_GetTick();
-	uint8_t led_off = 0; // flag to indicate if led is off
+	uint32_t id_blink_start = HAL_GetTick();
+	uint32_t loop_diagnostics_start = HAL_GetTick();
 
-//	FLASH_OBProgramInitTypeDef ob = {0};
-//
-//	HAL_FLASH_Unlock();
-//	HAL_FLASH_OB_Unlock();
-//
-//	// Read current OBs
-//	HAL_FLASHEx_OBGetConfig(&ob);
-//
-//	// Set BOOT0 source to option byte (nSWBOOT0 = 0)
-//	ob.OptionType = OPTIONBYTE_USER;
-//	ob.USERConfig = (ob.USERConfig & ~OB_USER_nSWBOOT0) | OB_USER_nBOOT0;
-//
-//	HAL_FLASHEx_OBProgram(&ob);
-//
-//	// Apply changes (this triggers a reset)
-//	HAL_FLASH_OB_Launch();
-//	JumpToBootloader_G4();
+	uint8_t led_off = 0; // flag to indicate if led is off
+	uint8_t led_id_mode = 0; // flag to indicate if in id mode
 
 
   /* USER CODE END 2 */
@@ -320,11 +321,6 @@ int main(void)
 		__HAL_TIM_SET_COMPARE(&htim20, TIM_CHANNEL_2, coil_pwm_ccr[7]);
 		__HAL_TIM_SET_COMPARE(&htim20, TIM_CHANNEL_3, coil_pwm_ccr[8]);
 
-		// set LED
-		__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, IND_G);
-		__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, IND_R);
-		__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, IND_B);
-
 
 		// STATE MACHINE START
 
@@ -349,9 +345,12 @@ int main(void)
 		}
 		can_latency = HAL_GetTick() - can_last_heard_from_master;
 		if (can_latency > CAN_TIMEOUT) {
+			can_timeout = 1;
 			slave_faults.flags.communication_fault = 1;
 		}
-		slave_faults.flags.address_conflict = address_conflict_detected;
+		else {
+			can_timeout = 0;
+		}
 
 		// check for faults and disarm
 		if (slave_status.flags.arm_active && slave_faults.byte) {
@@ -375,39 +374,35 @@ int main(void)
 
 		// POST STATE MACHINE
 
-		if (slave_status.flags.coils_nonzero) { // Blue: coils are on
-			IND_R = 0;
-			IND_G = 0;
-			IND_B = 100;
-		} else if (slave_status.flags.arm_active) { // Green: armed
-			IND_R = 0;
-			IND_G = 100;
-			IND_B = 0;
-		} else if (slave_faults.byte) { // Red: fault
-			IND_R = 100;
-			IND_G = 0;
-			IND_B = 0;
-		} else { // Yellow: idle
-			IND_R = 100;
-			IND_G = 100;
-			IND_B = 0;
-		}
-
 	    // turn can led off for CAN_BLINK_TIME every CAN_BLINK_FREQ ms
 		if (HAL_GetTick() - can_blink_start > CAN_BLINK_FREQ) {
 			can_blink_start = HAL_GetTick();
-			if (!can_blink) led_off = 1;
-			can_blink = 0;
+			if (can_timeout) led_off = 1;
 		}
-
 		if (HAL_GetTick() - can_blink_start > CAN_BLINK_TIME) {
 			led_off = 0;
 		}
 
-		if (led_off) {
-			IND_R = 0;
-			IND_G = 0;
-			IND_B = 0; // turn off LED
+		if (HAL_GetTick() - id_blink_start > ID_BLINK_FREQ) {
+			id_blink_start = HAL_GetTick();
+			if (slave_settings.flags.identify) led_id_mode = 1;
+		}
+		if (HAL_GetTick() - id_blink_start > ID_BLINK_TIME) {
+			led_id_mode = 0;
+		}
+
+		if (led_id_mode) { // White: ID mode
+			_set_rgb(90, 100, 90);
+		} else if (led_off) { // Off: Communication fault
+			set_rgb(0, 0, 0);
+		} else if (slave_status.flags.coils_nonzero) { // Blue: coils are on
+			set_rgb(0, 0, 100);
+		} else if (slave_status.flags.arm_active) { // Green: armed
+			set_rgb(0, 100, 0);
+		} else if (slave_faults.byte) { // Red: fault
+			set_rgb(100, 0, 0);
+		} else { // Yellow: idle
+			set_rgb(100, 100, 0);
 		}
 
 
@@ -416,6 +411,19 @@ int main(void)
 		if (HAL_GetTick() - graph_uart_start > 100) {
 			graph_uart_start = HAL_GetTick();
 			GraphUART_PeriodicUpdate();
+		}
+
+		main_loop_counter++;
+		if (HAL_GetTick() - loop_diagnostics_start > 100) {
+			loop_diagnostics_start = HAL_GetTick();
+			main_loop_freq = main_loop_counter;
+			main_loop_counter = 0;
+			adc3_loop_freq = adc3_loop_counter;
+			adc3_loop_counter = 0;
+			adc4_loop_freq = adc4_loop_counter;
+			adc4_loop_counter = 0;
+			adc5_loop_freq = adc5_loop_counter;
+			adc5_loop_counter = 0;
 		}
 
 	}
@@ -497,7 +505,7 @@ static void MX_ADC1_Init(void)
   hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
   hadc1.Init.LowPowerAutoWait = DISABLE;
   hadc1.Init.ContinuousConvMode = ENABLE;
-  hadc1.Init.NbrOfConversion = 3;
+  hadc1.Init.NbrOfConversion = 4;
   hadc1.Init.DiscontinuousConvMode = DISABLE;
   hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
   hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
@@ -547,6 +555,15 @@ static void MX_ADC1_Init(void)
   */
   sConfig.Channel = ADC_CHANNEL_5;
   sConfig.Rank = ADC_REGULAR_RANK_3;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_TEMPSENSOR_ADC1;
+  sConfig.Rank = ADC_REGULAR_RANK_4;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
     Error_Handler();

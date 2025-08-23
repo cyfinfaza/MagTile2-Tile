@@ -17,9 +17,9 @@ extern uint8_t can_blink;
 
 extern uint8_t my_address;
 
-int32_t can_last_heard_from_master = 0;
+extern MT2_Slave_Faults slave_faults;
 
-uint8_t address_conflict_detected = 0;
+int32_t can_last_heard_from_master = 0;
 
 void CAN_Init(FDCAN_HandleTypeDef *can_selection) {
 	hfdcan = can_selection;
@@ -62,9 +62,9 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *which_fdcan, uint32_t RxFifo
 			return; // not for me
 		}
 		if (rx_header.Identifier >> 8 != MASTER_OUT_PRIORITY) {
-			address_conflict_detected = 1;
+			slave_faults.flags.address_conflict_fault = 1;
 		}
-		can_blink = 1;
+//		can_blink = 1;
 		can_last_heard_from_master = HAL_GetTick();
 		uint8_t reg = rx_data[0];
 		uint8_t len = rx_header.DataLength - 1;

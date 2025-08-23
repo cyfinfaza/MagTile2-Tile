@@ -36,7 +36,8 @@ typedef union {
 		uint8_t vsense_fault: 1; // TODO
 		uint8_t invalid_value_fault: 1;
 		uint8_t communication_fault: 1;
-		uint8_t address_conflict: 1;
+		uint8_t address_conflict_fault: 1;
+		uint8_t hv_rail_sag_fault: 1;
 	} flags;
 } MT2_Slave_Faults;
 

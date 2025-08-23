@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include "safety_config.h"
 #include "mt2_types.h"
+#include "stm32g4xx_hal_adc_ex.h"
 
 uint16_t ADC1_DMA_BUFFER[ADC1_CHANNELS*2];
 uint16_t ADC2_DMA_BUFFER[ADC2_CHANNELS*2];
@@ -24,6 +25,7 @@ uint16_t ADC5_DMA_BUFFER[ADC5_CHANNELS*2];
 uint16_t V_SENSE_HV = 0;
 uint16_t V_SENSE_12 = 0;
 uint16_t V_SENSE_5 = 0;
+uint16_t INTERNAL_TEMP_SENSE = 0; // Internal temperature sensor reading
 
 uint16_t TEMP_SENSE[NUM_COILS];
 uint16_t COIL_CURRENT[NUM_COILS];
@@ -33,10 +35,21 @@ float v_sense_hv = 0;
 float v_sense_12 = 0;
 float v_sense_5 = 0;
 
+extern float master_v_sense_hv;
+uint32_t hv_sagging_since = 0; // timestamp for when HV started sagging
+
+uint16_t mcu_temp;
+
+float master_v_sense_hv = 0; // Master controller HV sense voltage
+
 uint16_t coil_current_reading[NUM_COILS];
 float coil_temp_from_resistance[NUM_COILS];
 float temp_sensor_reading[NUM_COILS];
 int16_t coil_temp[NUM_COILS];
+
+extern int adc3_loop_counter;
+extern int adc4_loop_counter;
+extern int adc5_loop_counter;
 
 #define CLAMP(_value, _min, _max) \
 	((_value) < (_min) ? (_min) : ((_value) > (_max) ? (_max) : (_value)))
@@ -94,6 +107,7 @@ void populate_d_max_lut() {
 }
 
 float coil_estimated_resistance[NUM_COILS] = {0};
+int16_t coil_estimated_resistance_report[NUM_COILS] = {0};
 
 
 extern MT2_Slave_Faults slave_faults;
@@ -119,19 +133,15 @@ void ADC_Init(ADC_HandleTypeDef* hadc1, ADC_HandleTypeDef* hadc2, ADC_HandleType
 	HAL_ADCEx_Calibration_Start(hadc4, ADC_SINGLE_ENDED);
 	HAL_ADCEx_Calibration_Start(hadc5, ADC_SINGLE_ENDED);
 
+	populate_d_max_lut(); // populate the max duty cycle lookup table
+	hv_sagging_since = HAL_GetTick(); // initialize hv sag timer
+
 	// start the ADCs in DMA mode
 	HAL_ADC_Start_DMA(hadc1, (uint32_t*)&ADC1_DMA_BUFFER, ADC1_CHANNELS*2);
 	HAL_ADC_Start_DMA(hadc2, (uint32_t*)&ADC2_DMA_BUFFER, ADC2_CHANNELS*2);
 	HAL_ADC_Start_DMA(hadc3, (uint32_t*)&ADC3_DMA_BUFFER, ADC3_CHANNELS*2);
 	HAL_ADC_Start_DMA(hadc4, (uint32_t*)&ADC4_DMA_BUFFER, ADC4_CHANNELS*2);
 	HAL_ADC_Start_DMA(hadc5, (uint32_t*)&ADC5_DMA_BUFFER, ADC5_CHANNELS*2);
-
-	// set all temp sense from resistance to -273.15C
-//	for (int i = 0; i < NUM_COILS; i++) {
-//		coil_temp_from_resistance[i] = -273.15f;
-//	}
-
-	populate_d_max_lut(); // populate the max duty cycle lookup table
 }
 
 void ADC1_ProcessBuffer(uint16_t* buffer) {
@@ -139,11 +149,23 @@ void ADC1_ProcessBuffer(uint16_t* buffer) {
 	V_SENSE_HV = buffer[0];
 	V_SENSE_12 = buffer[1];
 	V_SENSE_5 = buffer[2];
+	INTERNAL_TEMP_SENSE = buffer[3];
 
 	// calculate measurements
 	v_sense_12 = CONVERT_VSENSE(V_SENSE_12, 10.0f, 1.0f, 65535.0f);
 	v_sense_5 = CONVERT_VSENSE(V_SENSE_5, 10.0f, 10.0f, 65535.0f);
 	v_sense_hv = CONVERT_VSENSE(V_SENSE_HV, 51.0f, 2.0f, 65535.0f);
+	mcu_temp = __HAL_ADC_CALC_TEMPERATURE(VREF*1000.0f, INTERNAL_TEMP_SENSE>>4, ADC_RESOLUTION_12B);
+
+	if (!slave_status.flags.arm_active && !slave_status.flags.shutdown_from_fault) {
+		slave_faults.flags.hv_rail_sag_fault = 0; // clear temp sense fault if not armed
+	}
+
+	if (master_v_sense_hv - v_sense_hv < MAX_HV_SAG) { // if HV is not sagging, reset the timer
+		hv_sagging_since = HAL_GetTick();
+	} else if (HAL_GetTick() - hv_sagging_since > MAX_HV_SAG_TIME) { // if HV has been sagging for too long, set fault
+		slave_faults.flags.hv_rail_sag_fault = 1;
+	}
 
 	// set Ki/Kp based on input voltage
 	float compensation_factor = CLAMP(K_nominal_at_vin / v_sense_hv, 0.5f, 2.0f);
@@ -207,10 +229,13 @@ void HAL_ADC_HalfConvCpltCallback(ADC_HandleTypeDef* hadc) {
 		ADC2_ProcessBuffer(&ADC2_DMA_BUFFER[0]);
 	} else if (hadc->Instance == ADC3) {
 		ITM_Send32(0, ADC3_DMA_BUFFER[0]); // Debugging line
+		adc3_loop_counter++;
 		ADC345_ProcessBuffer(&ADC3_DMA_BUFFER[0], 0);
 	} else if (hadc->Instance == ADC4) {
+		adc4_loop_counter++;
 		ADC345_ProcessBuffer(&ADC4_DMA_BUFFER[0], 3);
 	} else if (hadc->Instance == ADC5) {
+		adc5_loop_counter++;
 		ADC345_ProcessBuffer(&ADC5_DMA_BUFFER[0], 6);
 	}
 }
@@ -221,10 +246,13 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 	} else if (hadc->Instance == ADC2) {
 		ADC2_ProcessBuffer(&ADC2_DMA_BUFFER[ADC2_CHANNELS]);
 	} else if (hadc->Instance == ADC3) {
+		adc3_loop_counter++;
 		ADC345_ProcessBuffer(&ADC3_DMA_BUFFER[ADC3_CHANNELS], 0);
 	} else if (hadc->Instance == ADC4) {
+		adc4_loop_counter++;
 		ADC345_ProcessBuffer(&ADC4_DMA_BUFFER[ADC4_CHANNELS], 3);
 	} else if (hadc->Instance == ADC5) {
+		adc5_loop_counter++;
 		ADC345_ProcessBuffer(&ADC5_DMA_BUFFER[ADC5_CHANNELS], 6);
 	}
 }
@@ -269,6 +297,11 @@ void PID_Solve3(uint8_t coil_offset) {
 			slave_faults.flags.current_spike_fault = 1;
 		}
 		coil_estimated_resistance[i] = (v_sense_hv) * pid_pwm_output[i] / (float)coil_current_reading[i] * 1000.0f;
+		if (isnan(coil_estimated_resistance[i]) || coil_setpoint[i] < 100 || abs((int)coil_setpoint[i] - (int)coil_current_reading[i]) > 400) {
+			coil_estimated_resistance_report[i] = -1;
+		} else {
+			coil_estimated_resistance_report[i] = (uint16_t)(CLAMP(coil_estimated_resistance[i], 0.0f, 30.0f) * 1000.0f);
+		}
 		if (coil_setpoint[i] > MAX_SETPOINT || coil_current_reading[i] > MAX_SPIKE) {
 			coil_pwm_ccr[i] = 0;
 			coil_setpoint[i] = 0;
