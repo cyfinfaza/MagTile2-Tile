@@ -49,6 +49,15 @@ HAL_StatusTypeDef CAN_SendMessage(uint32_t id, uint8_t *data, uint8_t len) {
 	return HAL_FDCAN_AddMessageToTxFifoQ(hfdcan, &TxHeader, data);
 }
 
+void CAN_KeepAlive()
+{
+	FDCAN_ProtocolStatusTypeDef protocolStatus = {};
+	HAL_FDCAN_GetProtocolStatus(hfdcan, &protocolStatus);
+	if (protocolStatus.BusOff) {
+		CLEAR_BIT(hfdcan->Instance->CCCR, FDCAN_CCCR_INIT);
+	}
+}
+
 void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *which_fdcan, uint32_t RxFifo0ITs) {
 	if (which_fdcan == hfdcan) {
 		FDCAN_RxHeaderTypeDef rx_header;

@@ -82,7 +82,7 @@ UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN PV */
 
-uint16_t build_number = 20;
+uint16_t build_number = 21;
 
 
 unsigned int hardware_tick = 0; // hardware tick counter
@@ -405,6 +405,8 @@ int main(void)
 			set_rgb(100, 100, 0);
 		}
 
+		// Handle CAN failure
+		CAN_KeepAlive();
 
 		Telemetry_Loop();
 
