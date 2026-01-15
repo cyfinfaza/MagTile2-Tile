@@ -82,7 +82,7 @@ UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN PV */
 
-uint16_t build_number = 21;
+uint16_t build_number = 22;
 
 
 unsigned int hardware_tick = 0; // hardware tick counter
@@ -226,7 +226,7 @@ int main(void)
 
 	// 1: green; 2: red; 3: blue
 	// set LED to red
-	set_rgb(100, 0, 0);
+//	set_rgb(100, 0, 0);
 
 	// turn on LED pwm
 	HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
@@ -283,7 +283,7 @@ int main(void)
 	ITM->TER  = 0xFFFFFFFF;                         // Enable all stimulus ports
 
 	// set LED to yellow
-	set_rgb(100, 100, 0);
+//	set_rgb(100, 100, 0);
 
 	uint32_t graph_uart_start = HAL_GetTick();
 
@@ -391,18 +391,22 @@ int main(void)
 			led_id_mode = 0;
 		}
 
-		if (led_id_mode) { // White: ID mode
-			_set_rgb(90, 100, 90);
-		} else if (led_off) { // Off: Communication fault
+		if (global_state.flags.global_led_disable || (HAL_GetTick() < 500)) {
 			set_rgb(0, 0, 0);
-		} else if (slave_status.flags.coils_nonzero) { // Blue: coils are on
-			set_rgb(0, 0, 100);
-		} else if (slave_status.flags.arm_active) { // Green: armed
-			set_rgb(0, 100, 0);
-		} else if (slave_faults.byte) { // Red: fault
-			set_rgb(100, 0, 0);
-		} else { // Yellow: idle
-			set_rgb(100, 100, 0);
+		} else {
+			if (led_id_mode) { // White: ID mode
+				_set_rgb(90, 100, 90);
+			} else if (led_off) { // Off: Communication fault
+				set_rgb(0, 0, 0);
+			} else if (slave_status.flags.coils_nonzero) { // Blue: coils are on
+				set_rgb(0, 0, 100);
+			} else if (slave_status.flags.arm_active) { // Green: armed
+				set_rgb(0, 100, 0);
+			} else if (slave_faults.byte) { // Red: fault
+				set_rgb(100, 0, 0);
+			} else { // Yellow: idle
+				set_rgb(100, 100, 0);
+			}
 		}
 
 		// Handle CAN failure

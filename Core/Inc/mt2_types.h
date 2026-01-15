@@ -46,6 +46,7 @@ typedef union {
 	struct {
 		uint8_t global_arm: 1;
 		uint8_t global_fault_clear: 1;
+		uint8_t global_led_disable: 1;
 	} flags;
 } MT2_Global_State;
 
