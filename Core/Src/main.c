@@ -82,7 +82,7 @@ UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN PV */
 
-uint16_t build_number = 22;
+uint16_t build_number = 23;
 
 
 unsigned int hardware_tick = 0; // hardware tick counter
@@ -346,6 +346,7 @@ int main(void)
 		can_latency = HAL_GetTick() - can_last_heard_from_master;
 		if (can_latency > CAN_TIMEOUT) {
 			can_timeout = 1;
+			global_state.flags.global_led_disable = 0;
 			slave_faults.flags.communication_fault = 1;
 		}
 		else {
@@ -993,7 +994,7 @@ static void MX_FDCAN1_Init(void)
   hfdcan1.Init.NominalSyncJumpWidth = 4;
   hfdcan1.Init.NominalTimeSeg1 = 13;
   hfdcan1.Init.NominalTimeSeg2 = 6;
-  hfdcan1.Init.DataPrescaler = 3;
+  hfdcan1.Init.DataPrescaler = 6;
   hfdcan1.Init.DataSyncJumpWidth = 4;
   hfdcan1.Init.DataTimeSeg1 = 11;
   hfdcan1.Init.DataTimeSeg2 = 5;

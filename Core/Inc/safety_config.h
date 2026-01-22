@@ -13,7 +13,7 @@
 #define MAX_SPIKE 4700
 
 // Input Voltage Rails
-#define MAX_HV_SAG 3.0f
+#define MAX_HV_SAG 5.0f
 #define MAX_HV_SAG_TIME 200 // ms
 
 // Temp sensing
