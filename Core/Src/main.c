@@ -82,7 +82,7 @@ UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN PV */
 
-uint16_t build_number = 23;
+uint16_t build_number = 24;
 
 
 unsigned int hardware_tick = 0; // hardware tick counter

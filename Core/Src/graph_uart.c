@@ -96,7 +96,7 @@ void GraphUART_PeriodicUpdate() {
 //
 // Written by ChatGPT
 __attribute__((noreturn))
-static void JumpToBootloader_G4(void)
+void JumpToBootloader_G4(void)
 {
     typedef void (*pFunction)(void);
     const uint32_t SYSMEM_BASE = 0x1FFF0000UL; // STM32G4 system memory base (AN2606)

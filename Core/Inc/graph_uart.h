@@ -15,4 +15,6 @@ void GraphUART_Init(UART_HandleTypeDef *north_selection, UART_HandleTypeDef *eas
 
 void GraphUART_PeriodicUpdate(void);
 
+void JumpToBootloader_G4(void);
+
 #endif /* INC_GRAPH_UART_H_ */

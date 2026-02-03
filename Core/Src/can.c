@@ -10,6 +10,8 @@
 #include <stdint.h>
 #include <string.h>
 #include "mt2_types.h"
+#include "adc.h"
+#include "graph_uart.h"
 
 FDCAN_HandleTypeDef *hfdcan;
 
@@ -20,6 +22,8 @@ extern uint8_t my_address;
 extern MT2_Slave_Faults slave_faults;
 
 int32_t can_last_heard_from_master = 0;
+
+#define JUMP_TO_BOOTLOADER_COMMAND 0xD0
 
 void CAN_Init(FDCAN_HandleTypeDef *can_selection) {
 	hfdcan = can_selection;
@@ -58,6 +62,28 @@ void CAN_KeepAlive()
 	}
 }
 
+static const uint8_t SETPOINTS_START_ADDR = 0x10;
+static const uint8_t CLEAR_PENDING_COMMAND = 0x1A;
+static const uint8_t APPLY_PENDING_COMMAND = 0x1B;
+static uint16_t pending_setpoints[NUM_COILS] = {0};
+static void handle_setpoint_data(uint8_t *payload, uint8_t length) {
+	// Implement setpoint data handling logic here
+	uint8_t reg = payload[0];
+	uint8_t len = length - 1;
+	if (reg == CLEAR_PENDING_COMMAND) {
+		memset(pending_setpoints, 0, sizeof(pending_setpoints));
+	} else if (reg == APPLY_PENDING_COMMAND) {
+		for (int i = 0; i < NUM_COILS; i++) {
+			*((uint16_t *)registry_table[SETPOINTS_START_ADDR + i].addr) = pending_setpoints[i];
+		}
+		return;
+	} else {
+		if (reg >= SETPOINTS_START_ADDR && reg < SETPOINTS_START_ADDR + NUM_COILS && len == sizeof(uint16_t)) {
+			memcpy(&pending_setpoints[reg - SETPOINTS_START_ADDR], &payload[1], sizeof(uint16_t));
+		}
+	}
+}
+
 void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *which_fdcan, uint32_t RxFifo0ITs) {
 	if (which_fdcan == hfdcan) {
 		FDCAN_RxHeaderTypeDef rx_header;
@@ -77,8 +103,16 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *which_fdcan, uint32_t RxFifo
 		can_last_heard_from_master = HAL_GetTick();
 		uint8_t reg = rx_data[0];
 		uint8_t len = rx_header.DataLength - 1;
+		if (reg == JUMP_TO_BOOTLOADER_COMMAND && len == 0) {
+			JumpToBootloader_G4();
+			return;
+		}
 		if (len > 4) {
 			return; // too long
+		}
+		if ((reg & 0xF0) == 0x10) {
+			handle_setpoint_data((uint8_t*)&rx_data, rx_header.DataLength);
+			return; // don't treat this as a register like the others
 		}
 		// check if the register is enabled and writable
 		if (reg < registry_count && registry_table[reg].enabled
